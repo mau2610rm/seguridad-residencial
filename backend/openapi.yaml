@@ -1,0 +1,151 @@
+openapi: 3.0.3
+info:
+  title: Seguridad Residencial API
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000
+paths:
+  /auth/login:
+    post:
+      summary: Iniciar sesión
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        "200":
+          description: OK, devuelve accessToken, refreshToken y user
+        "401":
+          description: Credenciales inválidas
+  /auth/refresh:
+    post:
+      summary: Renovar access token
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken: { type: string }
+      responses:
+        "200":
+          description: OK, devuelve accessToken
+        "401":
+          description: Refresh token inválido
+  /auth/me:
+    get:
+      summary: Usuario actual (requiere Bearer token)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Datos del usuario
+        "401":
+          description: No autenticado
+  /doors:
+    get:
+      summary: Listar puertas del residencial
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Lista de puertas
+  /doors/{id}/open:
+    post:
+      summary: Abrir puerta (mock). Verifica límites y registra apertura.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Puerta abierta
+        "429":
+          description: Límite de aperturas alcanzado
+  /visitors/codes:
+    get:
+      summary: Listar códigos de visitante
+      security: [{ bearerAuth: [] }]
+    post:
+      summary: Crear código de visitante
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [unitId, validUntil]
+              properties:
+                unitId: { type: string }
+                validFrom: { type: string, format: date-time }
+                validUntil: { type: string, format: date-time }
+                maxUses: { type: integer, default: 1 }
+                doorIds: { type: string, description: "IDs separados por coma o *" }
+  /visitors/validate:
+    post:
+      summary: Validar código (guardia/admin). Registra uso y apertura.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, doorId]
+              properties:
+                code: { type: string }
+                doorId: { type: string }
+  /incidents:
+    get:
+      summary: Listar incidentes (paginado)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer }
+    post:
+      summary: Reportar incidente
+      security: [{ bearerAuth: [] }]
+  /payments:
+    get:
+      summary: Listar pagos/cuotas
+      security: [{ bearerAuth: [] }]
+  /payments/{id}/confirm:
+    post:
+      summary: Confirmar pago (admin)
+      security: [{ bearerAuth: [] }]
+  /limits:
+    get:
+      summary: Listar límites de apertura (admin)
+      security: [{ bearerAuth: [] }]
+    put:
+      summary: Crear límite (admin)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                unitId: { type: string, nullable: true }
+                doorId: { type: string, nullable: true }
+                maxOpenings: { type: integer }
+                period: { type: string, enum: [day, month] }
+  /units:
+    get:
+      summary: Listar unidades del residencial
+      security: [{ bearerAuth: [] }]
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

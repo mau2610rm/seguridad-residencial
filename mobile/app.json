@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Seguridad Residencial",
+    "slug": "seguridad-residencial",
+    "version": "1.0.0",
+    "scheme": "seguridad-residencial",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1a1a2e"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.seguridadresidencial.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1a1a2e"
+      },
+      "package": "com.seguridadresidencial.app"
+    },
+    "plugins": ["expo-router", "expo-secure-store"]
+  }
+}

@@ -1,0 +1,143 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Residencial {
+  id        String   @id @default(cuid())
+  nombre    String
+  direccion String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+  units     Unit[]
+  doors     Door[]
+  incidents Incident[]
+  limits    OpeningLimit[]
+}
+
+model User {
+  id             String      @id @default(cuid())
+  email          String      @unique
+  passwordHash   String
+  name           String?
+  role           String      // admin_residencial | guardia | residente
+  residencialId  String
+  residencial    Residencial @relation(fields: [residencialId], references: [id], onDelete: Cascade)
+  unitId         String?     @unique
+  unit           Unit?       @relation("UserUnit")
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  openings     Opening[]
+  visitorCodes VisitorCode[]
+  incidents    Incident[]
+}
+
+model Unit {
+  id            String   @id @default(cuid())
+  number        String
+  residencialId String
+  residencial   Residencial @relation(fields: [residencialId], references: [id], onDelete: Cascade)
+  userId        String?  @unique
+  user          User?    @relation("UserUnit", fields: [userId], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  visitorCodes VisitorCode[]
+  payments     Payment[]
+  openings     Opening[]
+
+  @@unique([residencialId, number])
+}
+
+model Door {
+  id            String   @id @default(cuid())
+  name          String
+  doorType      String   @default("principal") // principal | peatonal | estacionamiento
+  residencialId String
+  residencial   Residencial @relation(fields: [residencialId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  openings Opening[]
+}
+
+model Opening {
+  id             String       @id @default(cuid())
+  doorId         String
+  door           Door         @relation(fields: [doorId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  unitId         String?
+  unit           Unit?        @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  visitorCodeId  String?
+  visitorCode    VisitorCode? @relation(fields: [visitorCodeId], references: [id], onDelete: SetNull)
+  origin         String      // app | codigo_visitante | guardia
+  createdAt      DateTime    @default(now())
+}
+
+model VisitorCode {
+  id            String   @id @default(cuid())
+  code          String   @unique
+  unitId        String
+  unit          Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  createdById   String
+  createdBy     User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  validFrom     DateTime
+  validUntil    DateTime
+  maxUses       Int      @default(1)
+  usesRemaining Int      @default(1)
+  doorIds       String   // comma-separated door ids, or "*" for all
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  openings Opening[]
+}
+
+model Incident {
+  id             String   @id @default(cuid())
+  type           String
+  description    String
+  location       String?
+  photos         String?
+  status         String   @default("reportado")
+  reportedById   String
+  reportedBy     User     @relation(fields: [reportedById], references: [id], onDelete: Cascade)
+  residencialId  String
+  residencial    Residencial @relation(fields: [residencialId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Payment {
+  id             String   @id @default(cuid())
+  unitId         String
+  unit           Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  concept        String
+  amount         Float
+  dueDate        DateTime
+  status         String   @default("pendiente") // pendiente | pagado
+  reference      String?
+  paidAt         DateTime?
+  confirmedById  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model OpeningLimit {
+  id            String   @id @default(cuid())
+  residencialId String
+  residencial   Residencial @relation(fields: [residencialId], references: [id], onDelete: Cascade)
+  unitId        String?
+  doorId        String?
+  maxOpenings   Int
+  period        String   @default("day") // day | month
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
