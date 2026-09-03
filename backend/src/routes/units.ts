@@ -11,7 +11,7 @@ router.use(authMiddleware);
 router.get("/", async (req: AuthRequest, res: Response) => {
   if (!req.user) return res.status(401).json({ error: "No autenticado" });
   const where: { residencialId: string; userId?: string } = { residencialId: req.user.residencialId };
-  if (req.user.role === "residente" && req.user.unitId) {
+  if (req.user.role === "residente") {
     where.userId = req.user.userId;
   }
   const units = await prisma.unit.findMany({

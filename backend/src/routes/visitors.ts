@@ -3,6 +3,7 @@ import { z } from "zod";
 import { PrismaClient } from "@prisma/client";
 import { AuthRequest, authMiddleware, requireRoles } from "../middleware/auth";
 import type { Role } from "../middleware/auth";
+import { codeValidateLimiter } from "../middleware/rateLimiter";
 import { Router } from "express";
 import crypto from "crypto";
 
@@ -15,6 +16,10 @@ function generateCode(): string {
 
 const createCodeSchema = z.object({
   unitId: z.string(),
+  visitorName: z.string().optional(),
+  visitorType: z.enum(["casual", "delivery", "servicio", "familiar"]).optional().default("casual"),
+  vehiclePlate: z.string().optional(),
+  notes: z.string().optional(),
   validFrom: z.string().datetime().optional(),
   validUntil: z.string().datetime(),
   maxUses: z.number().int().min(1).default(1),
@@ -45,6 +50,9 @@ router.post("/codes", async (req: AuthRequest, res: Response) => {
   if (!req.user) return res.status(401).json({ error: "No autenticado" });
   try {
     const body = createCodeSchema.parse(req.body);
+    if (req.user.role === "residente" && req.user.unitId && body.unitId !== req.user.unitId) {
+      return res.status(403).json({ error: "Solo puedes generar códigos para tu unidad asignada" });
+    }
     const unit = await prisma.unit.findFirst({
       where: {
         id: body.unitId,
@@ -70,6 +78,10 @@ router.post("/codes", async (req: AuthRequest, res: Response) => {
         code,
         unitId: unit.id,
         createdById: req.user.userId,
+        visitorName: body.visitorName,
+        visitorType: body.visitorType,
+        vehiclePlate: body.vehiclePlate?.toUpperCase().trim(),
+        notes: body.notes,
         validFrom,
         validUntil,
         maxUses: body.maxUses,
@@ -106,7 +118,7 @@ const validateSchema = z.object({
   doorId: z.string(),
 });
 
-router.post("/validate", requireRoles("guardia", "admin_residencial"), async (req: AuthRequest, res: Response) => {
+router.post("/validate", codeValidateLimiter, requireRoles("guardia", "admin_residencial"), async (req: AuthRequest, res: Response) => {
   if (!req.user) return res.status(401).json({ error: "No autenticado" });
   try {
     const body = validateSchema.parse({ ...req.body, code: (req.body.code as string)?.toUpperCase(), doorId: req.body.doorId });
@@ -158,6 +170,10 @@ router.post("/validate", requireRoles("guardia", "admin_residencial"), async (re
       success: true,
       message: "Acceso permitido",
       unit: visitorCode.unit.number,
+      visitorName: visitorCode.visitorName,
+      visitorType: visitorCode.visitorType,
+      vehiclePlate: visitorCode.vehiclePlate,
+      usesRemaining: visitorCode.usesRemaining - 1,
     });
   } catch (e) {
     if (e instanceof z.ZodError) {

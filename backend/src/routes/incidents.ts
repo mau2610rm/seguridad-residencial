@@ -24,7 +24,19 @@ const storage = multer.diskStorage({
     cb(null, `incident-${unique}${ext}`);
   },
 });
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
+const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Tipo de archivo no permitido. Solo se aceptan imágenes JPEG, PNG y WebP."));
+    }
+  },
+});
 
 const createSchema = z.object({
   type: z.string().min(1),
@@ -101,6 +113,29 @@ router.patch("/:id", requireRoles("admin_residencial", "guardia"), async (req: A
     include: { reportedBy: { select: { id: true, name: true, email: true } } },
   });
   return res.json(updated);
+});
+
+router.get("/photos/:filename", async (req: AuthRequest, res: Response) => {
+  if (!req.user) return res.status(401).json({ error: "No autenticado" });
+  const filename = path.basename(req.params.filename);
+
+  const incident = await prisma.incident.findFirst({
+    where: {
+      residencialId: req.user.residencialId,
+      photos: { contains: filename },
+    },
+  });
+
+  if (!incident) {
+    return res.status(404).json({ error: "Foto no encontrada o no autorizada" });
+  }
+
+  const filePath = path.resolve(uploadDir, filename);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: "Archivo físico no encontrado" });
+  }
+
+  return res.sendFile(filePath);
 });
 
 router.get("/:id", async (req: AuthRequest, res: Response) => {

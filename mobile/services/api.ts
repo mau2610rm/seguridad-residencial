@@ -1,4 +1,4 @@
-import axios, { AxiosError } from "axios";
+import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import { getItem, setItem, removeItem, storageKeys } from "./storage";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
@@ -38,8 +38,8 @@ api.interceptors.request.use(async (config) => {
 api.interceptors.response.use(
   (res) => res,
   async (err: AxiosError) => {
-    const original = err.config as { _retry?: boolean };
-    if (err.response?.status === 401 && !original._retry) {
+    const original = err.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;
+    if (err.response?.status === 401 && original && !original._retry) {
       original._retry = true;
       const refresh = await getRefreshToken();
       if (refresh) {

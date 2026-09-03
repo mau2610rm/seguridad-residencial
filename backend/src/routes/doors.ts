@@ -18,7 +18,7 @@ router.get("/", async (req: AuthRequest, res: Response) => {
   return res.json(doors);
 });
 
-router.post("/:id/open", async (req: AuthRequest, res: Response) => {
+router.post("/:id/open", requireRoles("admin_residencial", "guardia", "residente"), async (req: AuthRequest, res: Response) => {
   if (!req.user) return res.status(401).json({ error: "No autenticado" });
   const doorId = req.params.id;
 
@@ -26,7 +26,7 @@ router.post("/:id/open", async (req: AuthRequest, res: Response) => {
     where: { id: doorId, residencialId: req.user.residencialId },
   });
   if (!door) {
-    return res.status(404).json({ error: "Puerta no encontrada" });
+    return res.status(404).json({ error: "Puerta no encontrada o sin acceso en este residencial" });
   }
 
   const limitCheck = await checkOpeningLimits(
@@ -47,7 +47,21 @@ router.post("/:id/open", async (req: AuthRequest, res: Response) => {
       origin: "app",
     },
   });
-  return res.json({ success: true, message: "Puerta abierta (simulación)" });
+  return res.json({ success: true, message: `Puerta ${door.name} abierta (simulación)`, doorId: door.id });
+});
+
+router.post("/:id/close", requireRoles("admin_residencial", "guardia"), async (req: AuthRequest, res: Response) => {
+  if (!req.user) return res.status(401).json({ error: "No autenticado" });
+  const doorId = req.params.id;
+
+  const door = await prisma.door.findFirst({
+    where: { id: doorId, residencialId: req.user.residencialId },
+  });
+  if (!door) {
+    return res.status(404).json({ error: "Puerta no encontrada o sin acceso en este residencial" });
+  }
+
+  return res.json({ success: true, message: `Puerta ${door.name} cerrada (simulación)`, doorId: door.id });
 });
 
 export default router;

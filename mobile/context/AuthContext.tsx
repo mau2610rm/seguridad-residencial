@@ -8,6 +8,7 @@ export interface User {
   id: string;
   email: string;
   name: string | null;
+  avatarUrl?: string | null;
   role: Role;
   residencialId: string;
   unitId: string | null;
@@ -20,6 +21,7 @@ interface AuthState {
   loading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: (idToken: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -68,6 +70,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(data.user);
   };
 
+  const loginWithGoogle = async (idToken: string) => {
+    const { data } = await api.post("/auth/google", { idToken });
+    await setTokens(data.accessToken, data.refreshToken);
+    setUser(data.user);
+  };
+
   const logout = async () => {
     await clearTokens();
     setUser(null);
@@ -80,6 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         isAuthenticated: !!user,
         login,
+        loginWithGoogle,
         logout,
         refreshUser,
       }}

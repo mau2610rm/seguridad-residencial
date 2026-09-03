@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Image } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "../../context/AuthContext";
 
@@ -13,6 +13,9 @@ export default function Home() {
 
   return (
     <View style={styles.container}>
+      {user?.avatarUrl ? (
+        <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
+      ) : null}
       <Text style={styles.greeting}>Hola, {user?.name || user?.email}</Text>
       <Text style={styles.role}>Rol: {user?.role}</Text>
       {user?.residencial && (
@@ -33,6 +36,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#1a1a2e",
     padding: 24,
+  },
+  avatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: "#4a90d9",
   },
   greeting: {
     fontSize: 22,

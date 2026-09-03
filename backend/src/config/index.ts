@@ -6,4 +6,7 @@ export const config = {
     refreshExpiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || "7d",
   },
   uploadDir: process.env.UPLOAD_DIR || "./uploads",
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID || "",
+  },
 };

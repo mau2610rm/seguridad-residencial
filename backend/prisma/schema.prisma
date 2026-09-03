@@ -24,13 +24,15 @@ model Residencial {
 model User {
   id             String      @id @default(cuid())
   email          String      @unique
-  passwordHash   String
+  passwordHash   String?
   name           String?
   role           String      // admin_residencial | guardia | residente
   residencialId  String
   residencial    Residencial @relation(fields: [residencialId], references: [id], onDelete: Cascade)
   unitId         String?     @unique
   unit           Unit?       @relation("UserUnit")
+  googleId       String?     @unique
+  avatarUrl      String?
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
@@ -94,6 +96,10 @@ model VisitorCode {
   maxUses       Int      @default(1)
   usesRemaining Int      @default(1)
   doorIds       String   // comma-separated door ids, or "*" for all
+  visitorName   String?
+  visitorType   String?  @default("casual") // casual | delivery | servicio | familiar
+  vehiclePlate  String?
+  notes         String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
