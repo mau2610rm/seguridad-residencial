@@ -107,33 +107,38 @@ model VisitorCode {
 }
 
 model Incident {
-  id             String   @id @default(cuid())
-  type           String
-  description    String
-  location       String?
-  photos         String?
-  status         String   @default("reportado")
-  reportedById   String
-  reportedBy     User     @relation(fields: [reportedById], references: [id], onDelete: Cascade)
-  residencialId  String
-  residencial    Residencial @relation(fields: [residencialId], references: [id], onDelete: Cascade)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id              String      @id @default(cuid())
+  type            String
+  description     String
+  location        String?
+  photos          String?
+  status          String      @default("reportado") // reportado | en_progreso | resuelto | cancelado
+  resolutionNotes String?
+  resolvedAt      DateTime?
+  resolvedById    String?
+  reportedById    String
+  reportedBy      User        @relation(fields: [reportedById], references: [id], onDelete: Cascade)
+  residencialId   String
+  residencial     Residencial @relation(fields: [residencialId], references: [id], onDelete: Cascade)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 }
 
 model Payment {
-  id             String   @id @default(cuid())
-  unitId         String
-  unit           Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
-  concept        String
-  amount         Float
-  dueDate        DateTime
-  status         String   @default("pendiente") // pendiente | pagado
-  reference      String?
-  paidAt         DateTime?
-  confirmedById  String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                    String    @id @default(cuid())
+  unitId                String
+  unit                  Unit      @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  concept               String
+  amount                Float
+  dueDate               DateTime
+  status                String    @default("pendiente") // pendiente | pagado
+  reference             String?
+  paidAt                DateTime?
+  confirmedById         String?
+  stripePaymentIntentId String?
+  stripeSessionId       String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 }
 
 model OpeningLimit {

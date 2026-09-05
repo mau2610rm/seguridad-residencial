@@ -45,8 +45,10 @@ const createSchema = z.object({
 });
 
 const updateSchema = z.object({
-  status: z.string().optional(),
+  status: z.enum(["reportado", "en_progreso", "resuelto", "cancelado"]).optional(),
+  resolutionNotes: z.string().optional(),
   description: z.string().optional(),
+  location: z.string().optional(),
 });
 
 router.use(authMiddleware);
@@ -54,6 +56,13 @@ router.use(authMiddleware);
 router.get("/", async (req: AuthRequest, res: Response) => {
   if (!req.user) return res.status(401).json({ error: "No autenticado" });
   const where: Record<string, unknown> = { residencialId: req.user.residencialId };
+
+  const statusQuery = req.query.status as string | undefined;
+  if (statusQuery && statusQuery !== "all") {
+    const statuses = statusQuery.split(",").map((s) => s.trim());
+    where.status = { in: statuses };
+  }
+
   const page = Math.max(1, parseInt(String(req.query.page)) || 1);
   const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit)) || 20));
   const skip = (page - 1) * limit;
@@ -61,7 +70,9 @@ router.get("/", async (req: AuthRequest, res: Response) => {
   const [incidents, total] = await Promise.all([
     prisma.incident.findMany({
       where,
-      include: { reportedBy: { select: { id: true, name: true, email: true } } },
+      include: {
+        reportedBy: { select: { id: true, name: true, email: true } },
+      },
       orderBy: { createdAt: "desc" },
       skip,
       take: limit,
@@ -100,19 +111,60 @@ router.post("/", upload.array("photos", 5), async (req: AuthRequest, res: Respon
   }
 });
 
-router.patch("/:id", requireRoles("admin_residencial", "guardia"), async (req: AuthRequest, res: Response) => {
+router.patch("/:id", async (req: AuthRequest, res: Response) => {
   if (!req.user) return res.status(401).json({ error: "No autenticado" });
   const incident = await prisma.incident.findFirst({
     where: { id: req.params.id, residencialId: req.user.residencialId },
   });
   if (!incident) return res.status(404).json({ error: "Incidente no encontrado" });
-  const body = updateSchema.parse(req.body);
-  const updated = await prisma.incident.update({
-    where: { id: incident.id },
-    data: body,
-    include: { reportedBy: { select: { id: true, name: true, email: true } } },
-  });
-  return res.json(updated);
+
+  const isStaff = req.user.role === "admin_residencial" || req.user.role === "guardia";
+  const isReporter = incident.reportedById === req.user.userId;
+
+  if (!isStaff && !isReporter) {
+    return res.status(403).json({ error: "No tienes permiso para modificar este incidente" });
+  }
+
+  try {
+    const body = updateSchema.parse(req.body);
+    const dataToUpdate: Record<string, unknown> = {};
+
+    if (body.description !== undefined) dataToUpdate.description = body.description;
+    if (body.location !== undefined) dataToUpdate.location = body.location;
+    if (body.resolutionNotes !== undefined) dataToUpdate.resolutionNotes = body.resolutionNotes;
+
+    if (body.status !== undefined) {
+      dataToUpdate.status = body.status;
+      if (body.status === "resuelto") {
+        dataToUpdate.resolvedAt = new Date();
+        dataToUpdate.resolvedById = req.user.userId;
+        if (body.resolutionNotes) dataToUpdate.resolutionNotes = body.resolutionNotes;
+      } else if (body.status === "cancelado") {
+        dataToUpdate.resolvedAt = new Date();
+        dataToUpdate.resolvedById = req.user.userId;
+        if (body.resolutionNotes) {
+          dataToUpdate.resolutionNotes = body.resolutionNotes;
+        } else if (!incident.resolutionNotes) {
+          dataToUpdate.resolutionNotes = "Incidente cancelado";
+        }
+      } else if (body.status === "en_progreso") {
+        dataToUpdate.resolvedAt = null;
+        dataToUpdate.resolvedById = null;
+      }
+    }
+
+    const updated = await prisma.incident.update({
+      where: { id: incident.id },
+      data: dataToUpdate,
+      include: { reportedBy: { select: { id: true, name: true, email: true } } },
+    });
+    return res.json(updated);
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      return res.status(400).json({ error: "Datos inválidos", details: e.errors });
+    }
+    throw e;
+  }
 });
 
 router.get("/photos/:filename", async (req: AuthRequest, res: Response) => {

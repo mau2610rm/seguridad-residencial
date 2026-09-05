@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -14,10 +14,15 @@ import {
   Platform,
   ScrollView,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import QRCode from "react-native-qrcode-svg";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
+import { captureRef } from "react-native-view-shot";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import api from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
+import { Theme } from "../../constants/theme";
 
 interface VisitorCode {
   id: string;
@@ -58,6 +63,9 @@ export default function Visitors() {
   // Modal de visualización de QR y compartir
   const [qrModalVisible, setQrModalVisible] = useState(false);
   const [selectedCode, setSelectedCode] = useState<VisitorCode | null>(null);
+  const passCardRef = useRef<any>(null);
+  const qrRef = useRef<any>(null);
+  const [sharingQr, setSharingQr] = useState(false);
 
   // Validación de guardia
   const [validateCode, setValidateCode] = useState("");
@@ -115,7 +123,6 @@ export default function Visitors() {
     }
   }, [isGuardOrAdmin]);
 
-  // Asignar fecha rápida por preset
   const setQuickExpiry = (days: number) => {
     const d = new Date();
     d.setDate(d.getDate() + days);
@@ -154,7 +161,6 @@ export default function Visitors() {
       setVisitorType("casual");
       fetchCodes();
 
-      // Abrir inmediatamente el QR del nuevo pase para facilitar compartir
       setSelectedCode(data);
       setQrModalVisible(true);
     } catch {
@@ -235,23 +241,294 @@ export default function Visitors() {
   const shareInvitation = async (item: VisitorCode) => {
     const visitor = item.visitorName ? `\n👤 Visitante: *${item.visitorName}*` : "";
     const plate = item.vehiclePlate ? `\n🚗 Placas: *${item.vehiclePlate}*` : "";
+    const residencial = user?.residencial?.nombre ? `🏘️ *${user.residencial.nombre}*\n` : "";
     const unit = item.unit?.number || "N/A";
     const dateStr = new Date(item.validUntil).toLocaleString();
 
     const message =
-      `🏢 *PASE DE ACCESO RESIDENCIAL*\n` +
+      `${residencial}` +
+      `🛡️ *PASE DIGITAL DE ACCESO*\n` +
       `📍 *Unidad:* ${unit}${visitor}${plate}\n` +
       `🔑 *Código de acceso:* ${item.code}\n` +
       `⏳ *Válido hasta:* ${dateStr}\n\n` +
-      `Presenta este código al ingresar en la caseta de vigilancia.`;
+      `Presenta este código QR al ingresar en la caseta de vigilancia.`;
 
     try {
       await Share.share({
-        title: "Pase de Acceso Residencial",
+        title: `Pase de Acceso - Unidad ${unit}`,
         message,
       });
     } catch {
       Alert.alert("Error", "No se pudo compartir la invitación.");
+    }
+  };
+
+  // Generador de Tarjeta Gráfica Completa para Web y Fallback
+  const generatePassCardCanvas = (qrBase64: string, item: VisitorCode, residencialName: string): Promise<string> => {
+    return new Promise((resolve) => {
+      if (typeof document === "undefined") {
+        resolve(`data:image/png;base64,${qrBase64}`);
+        return;
+      }
+      try {
+        const canvas = document.createElement("canvas");
+        const width = 640;
+        const height = 960;
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(`data:image/png;base64,${qrBase64}`);
+          return;
+        }
+
+        // 1. Fondo Obsidian profundo
+        ctx.fillStyle = "#051424";
+        ctx.fillRect(0, 0, width, height);
+
+        // 2. Tarjeta contenedor con borde Sapphire
+        const margin = 24;
+        const cardW = width - margin * 2;
+        const cardH = height - margin * 2;
+        const radius = 24;
+
+        ctx.save();
+        ctx.beginPath();
+        if (typeof ctx.roundRect === "function") {
+          ctx.roundRect(margin, margin, cardW, cardH, radius);
+        } else {
+          ctx.rect(margin, margin, cardW, cardH);
+        }
+        ctx.fillStyle = "#122131";
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "rgba(59, 130, 246, 0.4)";
+        ctx.stroke();
+        ctx.restore();
+
+        // 3. Encabezado del Residencial
+        ctx.fillStyle = "#F8FAFC";
+        ctx.font = "bold 24px sans-serif";
+        ctx.fillText(residencialName || "Residia Security", margin + 28, margin + 55);
+
+        ctx.fillStyle = "#3B82F6";
+        ctx.font = "bold 12px sans-serif";
+        ctx.fillText("PASE DIGITAL DE ACCESO", margin + 28, margin + 78);
+
+        // Punto de verificación verde
+        ctx.beginPath();
+        ctx.arc(margin + cardW - 35, margin + 55, 7, 0, Math.PI * 2);
+        ctx.fillStyle = "#10B981";
+        ctx.fill();
+
+        // Línea divisoria
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(margin + 24, margin + 98);
+        ctx.lineTo(margin + cardW - 24, margin + 98);
+        ctx.stroke();
+
+        // 4. Visitante y Unidad
+        ctx.fillStyle = "#94A3B8";
+        ctx.font = "bold 11px sans-serif";
+        ctx.fillText("VISITANTE", margin + 28, margin + 130);
+
+        ctx.fillStyle = "#F8FAFC";
+        ctx.font = "bold 20px sans-serif";
+        const visitorTitle = item.visitorName || "Visitante Autorizado";
+        ctx.fillText(visitorTitle.length > 22 ? visitorTitle.slice(0, 22) + "..." : visitorTitle, margin + 28, margin + 158);
+
+        // Badge Unidad
+        const unitText = `Unidad ${item.unit?.number || "N/A"}`;
+        ctx.font = "bold 13px sans-serif";
+        const unitWidth = ctx.measureText(unitText).width;
+        ctx.fillStyle = "#1c2b3c";
+        ctx.beginPath();
+        if (typeof ctx.roundRect === "function") {
+          ctx.roundRect(margin + cardW - unitWidth - 40, margin + 132, unitWidth + 20, 32, 8);
+        } else {
+          ctx.rect(margin + cardW - unitWidth - 40, margin + 132, unitWidth + 20, 32);
+        }
+        ctx.fill();
+        ctx.strokeStyle = "rgba(59, 130, 246, 0.35)";
+        ctx.stroke();
+        ctx.fillStyle = "#ADC6FF";
+        ctx.fillText(unitText, margin + cardW - unitWidth - 30, margin + 153);
+
+        // Categoría de visita y placas
+        const tagY = margin + 198;
+        const typeLabel = (item.visitorType || "CASUAL").toUpperCase();
+        ctx.fillStyle = "#0d1c2d";
+        ctx.beginPath();
+        if (typeof ctx.roundRect === "function") {
+          ctx.roundRect(margin + 28, tagY - 18, 95, 26, 6);
+        } else {
+          ctx.rect(margin + 28, tagY - 18, 95, 26);
+        }
+        ctx.fill();
+        ctx.fillStyle = "#3B82F6";
+        ctx.font = "bold 11px sans-serif";
+        ctx.fillText(typeLabel, margin + 38, tagY);
+
+        if (item.vehiclePlate) {
+          const plateText = `🚗 ${item.vehiclePlate}`;
+          ctx.fillStyle = "#0d1c2d";
+          ctx.beginPath();
+          if (typeof ctx.roundRect === "function") {
+            ctx.roundRect(margin + 132, tagY - 18, 120, 26, 6);
+          } else {
+            ctx.rect(margin + 132, tagY - 18, 120, 26);
+          }
+          ctx.fill();
+          ctx.fillStyle = "#94A3B8";
+          ctx.fillText(plateText, margin + 142, tagY);
+        }
+
+        // 5. Contenedor de Código QR en blanco puro
+        const qrBoxSize = 250;
+        const qrBoxX = (width - qrBoxSize) / 2;
+        const qrBoxY = margin + 235;
+
+        ctx.fillStyle = "#FFFFFF";
+        ctx.beginPath();
+        if (typeof ctx.roundRect === "function") {
+          ctx.roundRect(qrBoxX, qrBoxY, qrBoxSize, qrBoxSize, 18);
+        } else {
+          ctx.rect(qrBoxX, qrBoxY, qrBoxSize, qrBoxSize);
+        }
+        ctx.fill();
+
+        const img = new Image();
+        img.onload = () => {
+          ctx.drawImage(img, qrBoxX + 15, qrBoxY + 15, qrBoxSize - 30, qrBoxSize - 30);
+
+          // 6. Badge de Código Alfanumérico
+          const codeY = qrBoxY + qrBoxSize + 18;
+          const codeW = 200;
+          const codeX = (width - codeW) / 2;
+          ctx.fillStyle = "#0d1c2d";
+          ctx.beginPath();
+          if (typeof ctx.roundRect === "function") {
+            ctx.roundRect(codeX, codeY, codeW, 38, 10);
+          } else {
+            ctx.rect(codeX, codeY, codeW, 38);
+          }
+          ctx.fill();
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+          ctx.stroke();
+
+          ctx.fillStyle = "#ADC6FF";
+          ctx.font = "bold 20px monospace";
+          ctx.textAlign = "center";
+          ctx.fillText(item.code, width / 2, codeY + 26);
+          ctx.textAlign = "left";
+
+          // 7. Caja de Vigencia y Reglas
+          const expY = codeY + 54;
+          const expW = cardW - 40;
+          const expX = margin + 20;
+          ctx.fillStyle = "#0d1c2d";
+          ctx.beginPath();
+          if (typeof ctx.roundRect === "function") {
+            ctx.roundRect(expX, expY, expW, 80, 12);
+          } else {
+            ctx.rect(expX, expY, expW, 80);
+          }
+          ctx.fill();
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.06)";
+          ctx.stroke();
+
+          const dateStr = new Date(item.validUntil).toLocaleString([], { dateStyle: "short", timeStyle: "short" });
+          ctx.fillStyle = "#F59E0B";
+          ctx.font = "bold 13px sans-serif";
+          ctx.fillText(`⏳ Válido hasta: ${dateStr}`, expX + 16, expY + 30);
+
+          ctx.fillStyle = "#10B981";
+          ctx.font = "bold 13px sans-serif";
+          ctx.fillText(`🛡️ Usos permitidos: ${item.usesRemaining} de ${item.maxUses}`, expX + 16, expY + 58);
+
+          // 8. Mensaje inferior
+          ctx.fillStyle = "#64748B";
+          ctx.font = "11px sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText("Presentar este pase en la caseta de vigilancia para validar el acceso.", width / 2, height - margin - 22);
+
+          resolve(canvas.toDataURL("image/png"));
+        };
+        img.onerror = () => {
+          resolve(`data:image/png;base64,${qrBase64}`);
+        };
+        img.src = `data:image/png;base64,${qrBase64}`;
+      } catch {
+        resolve(`data:image/png;base64,${qrBase64}`);
+      }
+    });
+  };
+
+  const shareQrAsImage = async (item: VisitorCode) => {
+    setSharingQr(true);
+    try {
+      const residencialName = user?.residencial?.nombre || "Residencial Seguridad";
+
+      // 1. En aplicaciones móviles nativas (iOS / Android)
+      if (Platform.OS !== "web" && passCardRef.current) {
+        try {
+          const uri = await captureRef(passCardRef, {
+            format: "png",
+            quality: 1.0,
+            result: "tmpfile",
+          });
+
+          const isAvailable = await Sharing.isAvailableAsync();
+          if (isAvailable) {
+            await Sharing.shareAsync(uri, {
+              mimeType: "image/png",
+              dialogTitle: `Pase de Acceso - ${residencialName} (Unidad ${item.unit?.number})`,
+              UTI: "public.png",
+            });
+            return;
+          }
+        } catch (captureErr) {
+          console.log("captureRef error, fallback to QR canvas:", captureErr);
+        }
+      }
+
+      // 2. En Web o fallback nativo: generar tarjeta composite de alta fidelidad
+      if (qrRef.current) {
+        qrRef.current.toDataURL(async (data: string) => {
+          try {
+            if (Platform.OS === "web") {
+              const fullCardDataUrl = await generatePassCardCanvas(data, item, residencialName);
+              const link = document.createElement("a");
+              link.href = fullCardDataUrl;
+              link.download = `pase-${item.visitorName ? item.visitorName.replace(/\s+/g, "_") : "acceso"}-${item.code}.png`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              Alert.alert("✅ Pase Digital Generado", "La tarjeta de invitación completa ha sido descargada con éxito.");
+            } else {
+              const filename = `${FileSystem.cacheDirectory}pase-${item.code}.png`;
+              await FileSystem.writeAsStringAsync(filename, data, {
+                encoding: FileSystem.EncodingType.Base64,
+              });
+              await Sharing.shareAsync(filename, {
+                mimeType: "image/png",
+                dialogTitle: `Pase de Acceso - Unidad ${item.unit?.number || ""}`,
+                UTI: "public.png",
+              });
+            }
+          } catch (err) {
+            console.error("Error al procesar tarjeta:", err);
+            Alert.alert("Error", "No se pudo procesar la tarjeta digital de invitación.");
+          }
+        });
+      }
+    } catch (err) {
+      console.error("Error al compartir pase:", err);
+      Alert.alert("Error", "No se pudo exportar el pase como imagen.");
+    } finally {
+      setSharingQr(false);
     }
   };
 
@@ -273,10 +550,23 @@ export default function Visitors() {
     ]);
   };
 
+  const getVisitorTypeStyle = (type?: string | null) => {
+    switch (type) {
+      case "delivery":
+        return { color: Theme.colors.tertiary, bg: Theme.colors.tertiaryContainer, icon: "bicycle-outline", label: "DELIVERY" };
+      case "servicio":
+        return { color: Theme.colors.primaryLight, bg: "rgba(59, 130, 246, 0.15)", icon: "construct-outline", label: "SERVICIO" };
+      case "familiar":
+        return { color: Theme.colors.secondary, bg: Theme.colors.secondaryContainer, icon: "people-outline", label: "FAMILIAR" };
+      default:
+        return { color: Theme.colors.textSecondary, bg: Theme.colors.surfaceContainerHigh, icon: "person-outline", label: "CASUAL" };
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4a90d9" />
+        <ActivityIndicator size="large" color={Theme.colors.primary} />
       </View>
     );
   }
@@ -286,17 +576,21 @@ export default function Visitors() {
       {/* Sección de Guardia / Validación */}
       {isGuardOrAdmin && (
         <View style={styles.validateSection}>
-          <Text style={styles.sectionTitle}>🛡️ Validación de Visitantes</Text>
+          <View style={styles.validateHeaderRow}>
+            <Ionicons name="shield-checkmark" size={20} color={Theme.colors.secondary} />
+            <Text style={styles.sectionTitle}>Validación de Acceso en Caseta</Text>
+          </View>
 
           {doors.length > 0 && (
             <View style={styles.doorPicker}>
-              <Text style={styles.inputLabel}>Puerta de entrada:</Text>
+              <Text style={styles.inputLabel}>PUERTA DE ENTRADA:</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.doorsScroll}>
                 {doors.map((d) => (
                   <TouchableOpacity
                     key={d.id}
                     style={[styles.doorChip, validateDoorId === d.id && styles.doorChipActive]}
                     onPress={() => setValidateDoorId(d.id)}
+                    activeOpacity={0.8}
                   >
                     <Text style={validateDoorId === d.id ? styles.doorChipTextActive : styles.doorChipText}>
                       {d.name}
@@ -310,15 +604,16 @@ export default function Visitors() {
           <View style={styles.validateInputRow}>
             <TextInput
               style={[styles.input, { flex: 1, marginBottom: 0 }]}
-              placeholder="Código (8 caracteres)"
-              placeholderTextColor="#888"
+              placeholder="CÓDIGO (8 DÍGITOS)"
+              placeholderTextColor={Theme.colors.textMuted}
               value={validateCode}
               onChangeText={setValidateCode}
               maxLength={8}
               autoCapitalize="characters"
             />
-            <TouchableOpacity style={styles.scanCameraBtn} onPress={handleStartScan}>
-              <Text style={styles.scanCameraBtnText}>📷 Escanear QR</Text>
+            <TouchableOpacity style={styles.scanCameraBtn} onPress={handleStartScan} activeOpacity={0.85}>
+              <Ionicons name="qr-code-outline" size={18} color={Theme.colors.onPrimary} style={{ marginRight: 6 }} />
+              <Text style={styles.scanCameraBtnText}>Escanear</Text>
             </TouchableOpacity>
           </View>
 
@@ -326,13 +621,24 @@ export default function Visitors() {
             style={styles.validateBtn}
             onPress={() => validateVisitor()}
             disabled={validating}
+            activeOpacity={0.85}
           >
-            {validating ? <ActivityIndicator color="#fff" /> : <Text style={styles.validateBtnText}>Validar Acceso</Text>}
+            {validating ? (
+              <ActivityIndicator color={Theme.colors.onPrimary} />
+            ) : (
+              <View style={styles.btnContent}>
+                <Ionicons name="checkmark-done-circle-outline" size={20} color={Theme.colors.onPrimary} style={{ marginRight: 6 }} />
+                <Text style={styles.validateBtnText}>Validar Código de Entrada</Text>
+              </View>
+            )}
           </TouchableOpacity>
 
           {lastValidation && (
             <View style={styles.lastValidationBox}>
-              <Text style={styles.lastValidationTitle}>Último acceso validado:</Text>
+              <View style={styles.lastValidationHeader}>
+                <Ionicons name="checkmark-circle" size={16} color={Theme.colors.secondary} />
+                <Text style={styles.lastValidationTitle}>Último acceso verificado:</Text>
+              </View>
               <Text style={styles.lastValidationText}>
                 Unidad: {lastValidation.unit}
                 {lastValidation.visitorName ? ` • ${lastValidation.visitorName}` : ""}
@@ -343,12 +649,20 @@ export default function Visitors() {
         </View>
       )}
 
-      {/* Título de Códigos y Botón de Creación */}
-      <View style={styles.row}>
-        <Text style={styles.title}>Pases de Visita Activos</Text>
+      {/* Header y Botón Nuevo Pase */}
+      <View style={styles.headerRow}>
+        <View>
+          <Text style={styles.screenHeading}>Pases de Acceso</Text>
+          <Text style={styles.screenSubheading}>Códigos QR y accesos temporales</Text>
+        </View>
         {user?.role !== "guardia" && (
-          <TouchableOpacity style={styles.addBtn} onPress={() => { setQuickExpiry(0); setModalVisible(true); }}>
-            <Text style={styles.addBtnText}>+ Nuevo Pase</Text>
+          <TouchableOpacity
+            style={styles.addBtn}
+            onPress={() => { setQuickExpiry(0); setModalVisible(true); }}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="add-circle" size={16} color={Theme.colors.onPrimary} style={{ marginRight: 4 }} />
+            <Text style={styles.addBtnText}>Nuevo Pase</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -357,76 +671,136 @@ export default function Visitors() {
       <FlatList
         data={codes}
         keyExtractor={(item) => item.id}
+        contentContainerStyle={{ paddingBottom: 24 }}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchCodes(); }} />
+          <RefreshControl
+            refreshing={refreshing}
+            tintColor={Theme.colors.primary}
+            onRefresh={() => { setRefreshing(true); fetchCodes(); }}
+          />
         }
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={styles.cardTopRow}>
-              <View>
-                <Text style={styles.visitorName}>{item.visitorName || "Visitante general"}</Text>
-                <Text style={styles.visitorTypeBadge}>
-                  {item.visitorType ? item.visitorType.toUpperCase() : "CASUAL"}
-                  {item.vehiclePlate ? ` • 🚗 ${item.vehiclePlate}` : ""}
+        renderItem={({ item }) => {
+          const typeStyle = getVisitorTypeStyle(item.visitorType);
+
+          return (
+            <View style={styles.card}>
+              <View style={styles.cardTopRow}>
+                <View style={styles.visitorMetaCol}>
+                  <Text style={styles.visitorName}>{item.visitorName || "Visitante general"}</Text>
+                  <View style={[styles.visitorTypeBadge, { backgroundColor: typeStyle.bg }]}>
+                    <Ionicons name={typeStyle.icon as any} size={12} color={typeStyle.color} style={{ marginRight: 4 }} />
+                    <Text style={[styles.visitorTypeText, { color: typeStyle.color }]}>
+                      {typeStyle.label}
+                    </Text>
+                    {item.vehiclePlate ? (
+                      <Text style={[styles.visitorTypeText, { color: typeStyle.color }]}>
+                        {" "}• 🚗 {item.vehiclePlate}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+                <View style={styles.codeBadge}>
+                  <Text style={styles.codeText}>{item.code}</Text>
+                </View>
+              </View>
+
+              <View style={styles.metaDivider} />
+
+              <View style={styles.metaRow}>
+                <View style={styles.metaItem}>
+                  <Ionicons name="home-outline" size={13} color={Theme.colors.textMuted} />
+                  <Text style={styles.metaText}>Unidad {item.unit?.number}</Text>
+                </View>
+                <View style={styles.metaItem}>
+                  <Ionicons name="repeat-outline" size={13} color={Theme.colors.textMuted} />
+                  <Text style={styles.metaText}>Usos: {item.usesRemaining}/{item.maxUses}</Text>
+                </View>
+              </View>
+
+              <View style={styles.metaItem}>
+                <Ionicons name="time-outline" size={13} color={Theme.colors.textMuted} />
+                <Text style={styles.metaText}>
+                  Válido: {new Date(item.validUntil).toLocaleDateString()} {new Date(item.validUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </Text>
               </View>
-              <Text style={styles.code}>{item.code}</Text>
-            </View>
 
-            <Text style={styles.meta}>Unidad {item.unit?.number} • Usos restantes: {item.usesRemaining}/{item.maxUses}</Text>
-            <Text style={styles.meta}>Válido hasta: {new Date(item.validUntil).toLocaleString()}</Text>
-
-            <View style={styles.cardActions}>
-              <TouchableOpacity
-                style={styles.qrBtn}
-                onPress={() => {
-                  setSelectedCode(item);
-                  setQrModalVisible(true);
-                }}
-              >
-                <Text style={styles.qrBtnText}>🔍 Ver QR</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.shareBtn}
-                onPress={() => shareInvitation(item)}
-              >
-                <Text style={styles.shareBtnText}>📲 Compartir</Text>
-              </TouchableOpacity>
-
-              {user?.role !== "guardia" && (
-                <TouchableOpacity style={styles.delBtn} onPress={() => deleteCode(item.id)}>
-                  <Text style={styles.delBtnText}>Revocar</Text>
+              <View style={styles.cardActions}>
+                <TouchableOpacity
+                  style={styles.qrActionBtn}
+                  onPress={() => {
+                    setSelectedCode(item);
+                    setQrModalVisible(true);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="eye-outline" size={15} color={Theme.colors.primaryLight} style={{ marginRight: 4 }} />
+                  <Text style={styles.qrActionBtnText}>Ver Pase</Text>
                 </TouchableOpacity>
-              )}
+
+                <TouchableOpacity
+                  style={styles.shareImageActionBtn}
+                  onPress={() => {
+                    setSelectedCode(item);
+                    setQrModalVisible(true);
+                    setTimeout(() => shareQrAsImage(item), 300);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="image-outline" size={15} color={Theme.colors.onPrimary} style={{ marginRight: 4 }} />
+                  <Text style={styles.shareImageActionBtnText}>Compartir Tarjeta</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.shareTextActionBtn}
+                  onPress={() => shareInvitation(item)}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="chatbubble-ellipses-outline" size={15} color="#25D366" style={{ marginRight: 4 }} />
+                  <Text style={styles.shareTextActionBtnText}>Texto</Text>
+                </TouchableOpacity>
+
+                {user?.role !== "guardia" && (
+                  <TouchableOpacity
+                    style={styles.delActionBtn}
+                    onPress={() => deleteCode(item.id)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="trash-outline" size={16} color={Theme.colors.errorLight} />
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
-          </View>
-        )}
+          );
+        }}
       />
 
-      {/* Modal de Creación de Código */}
+      {/* Modal de Creación de Pase */}
       <Modal visible={modalVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <ScrollView contentContainerStyle={styles.modalScroll}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Crear Pase de Visita</Text>
+              <View style={styles.modalTopHeader}>
+                <Ionicons name="qr-code" size={24} color={Theme.colors.primary} />
+                <Text style={styles.modalTitle}>Crear Pase de Visita</Text>
+              </View>
 
-              <Text style={styles.inputLabel}>Nombre del visitante / Empresa:</Text>
+              <Text style={styles.inputLabel}>NOMBRE DEL VISITANTE / EMPRESA:</Text>
               <TextInput
                 style={styles.input}
                 placeholder="Ej. Juan Pérez o Uber Eats"
-                placeholderTextColor="#888"
+                placeholderTextColor={Theme.colors.textMuted}
                 value={visitorName}
                 onChangeText={setVisitorName}
               />
 
-              <Text style={styles.inputLabel}>Tipo de visita:</Text>
+              <Text style={styles.inputLabel}>TIPO DE VISITA:</Text>
               <View style={styles.typeRow}>
                 {(["casual", "familiar", "delivery", "servicio"] as const).map((t) => (
                   <TouchableOpacity
                     key={t}
                     style={[styles.typeChip, visitorType === t && styles.typeChipActive]}
                     onPress={() => setVisitorType(t)}
+                    activeOpacity={0.8}
                   >
                     <Text style={visitorType === t ? styles.typeChipTextActive : styles.typeChipText}>
                       {t.charAt(0).toUpperCase() + t.slice(1)}
@@ -435,17 +809,17 @@ export default function Visitors() {
                 ))}
               </View>
 
-              <Text style={styles.inputLabel}>Placas de vehículo (opcional):</Text>
+              <Text style={styles.inputLabel}>PLACAS DE VEHÍCULO (OPCIONAL):</Text>
               <TextInput
                 style={styles.input}
                 placeholder="Ej. ABC-1234"
-                placeholderTextColor="#888"
+                placeholderTextColor={Theme.colors.textMuted}
                 value={vehiclePlate}
                 onChangeText={setVehiclePlate}
                 autoCapitalize="characters"
               />
 
-              <Text style={styles.inputLabel}>Vigencia rápida:</Text>
+              <Text style={styles.inputLabel}>VIGENCIA RÁPIDA:</Text>
               <View style={styles.quickDatesRow}>
                 <TouchableOpacity style={styles.quickDateBtn} onPress={() => setQuickExpiry(0)}>
                   <Text style={styles.quickDateText}>Hoy</Text>
@@ -457,31 +831,44 @@ export default function Visitors() {
                   <Text style={styles.quickDateText}>3 días</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.quickDateBtn} onPress={() => setQuickExpiry(7)}>
-                  <Text style={styles.quickDateText}>1 semana</Text>
+                  <Text style={styles.quickDateText}>1 sem</Text>
                 </TouchableOpacity>
               </View>
 
               <TextInput
                 style={styles.input}
                 placeholder="Fecha límite (YYYY-MM-DD)"
-                placeholderTextColor="#888"
+                placeholderTextColor={Theme.colors.textMuted}
                 value={validUntil}
                 onChangeText={setValidUntil}
               />
 
-              <Text style={styles.inputLabel}>Número máximo de accesos:</Text>
+              <Text style={styles.inputLabel}>NÚMERO MÁXIMO DE ACCESOS:</Text>
               <TextInput
                 style={styles.input}
                 placeholder="Máx. usos"
-                placeholderTextColor="#888"
+                placeholderTextColor={Theme.colors.textMuted}
                 value={maxUses}
                 onChangeText={setMaxUses}
                 keyboardType="number-pad"
               />
 
-              <TouchableOpacity style={styles.createBtn} onPress={createCode} disabled={creating}>
-                {creating ? <ActivityIndicator color="#fff" /> : <Text style={styles.createBtnText}>Generar Pase y QR</Text>}
+              <TouchableOpacity
+                style={styles.createBtn}
+                onPress={createCode}
+                disabled={creating}
+                activeOpacity={0.85}
+              >
+                {creating ? (
+                  <ActivityIndicator color={Theme.colors.onPrimary} />
+                ) : (
+                  <View style={styles.btnContent}>
+                    <Ionicons name="sparkles-outline" size={18} color={Theme.colors.onPrimary} style={{ marginRight: 6 }} />
+                    <Text style={styles.createBtnText}>Generar Pase & Código QR</Text>
+                  </View>
+                )}
               </TouchableOpacity>
+
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)}>
                 <Text style={styles.cancelBtnText}>Cancelar</Text>
               </TouchableOpacity>
@@ -490,47 +877,149 @@ export default function Visitors() {
         </View>
       </Modal>
 
-      {/* Modal de Pase QR */}
+      {/* Modal de Pase QR con Tarjeta de Exportación de Alto Nivel */}
       <Modal visible={qrModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.qrModalContent}>
-            <Text style={styles.qrTitle}>Pase de Entrada</Text>
-            <Text style={styles.qrSubtitle}>
-              {selectedCode?.visitorName || "Visitante"} • Unidad {selectedCode?.unit?.number}
-            </Text>
+          <ScrollView contentContainerStyle={styles.qrModalScroll}>
+            {/* Tarjeta Visual de Pase Capturable para Imagen */}
+            <View ref={passCardRef} collapsable={false} style={styles.passDesignCard}>
+              {/* Encabezado del Residencial */}
+              <View style={styles.passHeader}>
+                <View style={styles.passLogoBadge}>
+                  <Ionicons name="shield-checkmark" size={24} color={Theme.colors.primaryLight} />
+                </View>
+                <View style={styles.passHeaderMeta}>
+                  <View style={styles.passBrandRow}>
+                    <Text style={styles.passResidencialName}>
+                      {user?.residencial?.nombre || "Residia Security"}
+                    </Text>
+                    <View style={styles.passVerifiedDot} />
+                  </View>
+                  <Text style={styles.passSubtitle}>PASE DIGITAL DE ACCESO</Text>
+                </View>
+              </View>
 
-            {selectedCode?.code && (
-              <View style={styles.qrBox}>
-                <QRCode
-                  value={selectedCode.code}
-                  size={200}
-                  color="#0f3460"
-                  backgroundColor="#ffffff"
-                />
+              <View style={styles.passDivider} />
+
+              {/* Información de Visitante y Unidad */}
+              <View style={styles.passInfoSection}>
+                <View style={styles.passRow}>
+                  <View style={styles.passCol}>
+                    <Text style={styles.passInfoLabel}>VISITANTE</Text>
+                    <Text style={styles.passVisitorName} numberOfLines={1}>
+                      {selectedCode?.visitorName || "Visitante Autorizado"}
+                    </Text>
+                  </View>
+                  <View style={styles.passUnitBadge}>
+                    <Ionicons name="home" size={12} color={Theme.colors.primaryLight} style={{ marginRight: 4 }} />
+                    <Text style={styles.passUnitText}>Unidad {selectedCode?.unit?.number || "N/A"}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.passTagsRow}>
+                  {selectedCode?.visitorType && (
+                    <View style={styles.passTagPill}>
+                      <Ionicons
+                        name={getVisitorTypeStyle(selectedCode.visitorType).icon as any}
+                        size={11}
+                        color={getVisitorTypeStyle(selectedCode.visitorType).color}
+                        style={{ marginRight: 4 }}
+                      />
+                      <Text style={[styles.passTagPillText, { color: getVisitorTypeStyle(selectedCode.visitorType).color }]}>
+                        {getVisitorTypeStyle(selectedCode.visitorType).label}
+                      </Text>
+                    </View>
+                  )}
+
+                  {selectedCode?.vehiclePlate ? (
+                    <View style={styles.passTagPill}>
+                      <Ionicons name="car-outline" size={11} color={Theme.colors.textSecondary} style={{ marginRight: 4 }} />
+                      <Text style={styles.passTagPillText}>🚗 {selectedCode.vehiclePlate}</Text>
+                    </View>
+                  ) : null}
+                </View>
+              </View>
+
+              {/* Contenedor del Código QR */}
+              {selectedCode?.code && (
+                <View style={styles.passQrContainer}>
+                  <View style={styles.passQrWrapper}>
+                    <QRCode
+                      value={selectedCode.code}
+                      size={180}
+                      color="#051424"
+                      backgroundColor="#FFFFFF"
+                      getRef={(c) => (qrRef.current = c)}
+                    />
+                  </View>
+
+                  <View style={styles.passCodeBadge}>
+                    <Text style={styles.passCodeDigits}>{selectedCode.code}</Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Detalles de Vigencia y Validación */}
+              <View style={styles.passFooterInfo}>
+                <View style={styles.passMetaItem}>
+                  <Ionicons name="time-outline" size={13} color={Theme.colors.tertiary} />
+                  <Text style={styles.passMetaText}>
+                    Válido hasta: {selectedCode ? new Date(selectedCode.validUntil).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) : ""}
+                  </Text>
+                </View>
+
+                <View style={styles.passMetaItem}>
+                  <Ionicons name="shield-outline" size={13} color={Theme.colors.secondary} />
+                  <Text style={styles.passMetaText}>
+                    Usos permitidos: {selectedCode?.usesRemaining} de {selectedCode?.maxUses}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.passInstructionBox}>
+                <Ionicons name="scan-outline" size={13} color={Theme.colors.textMuted} style={{ marginRight: 6 }} />
+                <Text style={styles.passInstructionText}>
+                  Presentar este código en la caseta de vigilancia para acceder.
+                </Text>
+              </View>
+            </View>
+
+            {/* Botones de Acción para Compartir */}
+            {selectedCode && (
+              <View style={styles.qrActionsWrapper}>
+                <TouchableOpacity
+                  style={styles.qrShareImageBtn}
+                  onPress={() => shareQrAsImage(selectedCode)}
+                  disabled={sharingQr}
+                  activeOpacity={0.85}
+                >
+                  {sharingQr ? (
+                    <ActivityIndicator color={Theme.colors.onPrimary} size="small" />
+                  ) : (
+                    <View style={styles.btnContent}>
+                      <Ionicons name="image" size={18} color={Theme.colors.onPrimary} style={{ marginRight: 8 }} />
+                      <Text style={styles.qrShareImageBtnText}>Compartir Tarjeta Digital (PNG)</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.qrShareTextBtn}
+                  onPress={() => shareInvitation(selectedCode)}
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.btnContent}>
+                    <Ionicons name="logo-whatsapp" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                    <Text style={styles.qrShareTextBtnText}>Enviar por WhatsApp / Texto</Text>
+                  </View>
+                </TouchableOpacity>
               </View>
             )}
 
-            <Text style={styles.qrCodeText}>{selectedCode?.code}</Text>
-            {selectedCode?.vehiclePlate ? (
-              <Text style={styles.qrMeta}>Vehículo autorizado: {selectedCode.vehiclePlate}</Text>
-            ) : null}
-            <Text style={styles.qrMeta}>
-              Válido hasta: {selectedCode ? new Date(selectedCode.validUntil).toLocaleString() : ""}
-            </Text>
-
-            {selectedCode && (
-              <TouchableOpacity
-                style={styles.qrShareBtn}
-                onPress={() => shareInvitation(selectedCode)}
-              >
-                <Text style={styles.qrShareBtnText}>📲 Enviar por WhatsApp / Compartir</Text>
-              </TouchableOpacity>
-            )}
-
             <TouchableOpacity style={styles.qrCloseBtn} onPress={() => setQrModalVisible(false)}>
-              <Text style={styles.qrCloseBtnText}>Cerrar</Text>
+              <Text style={styles.qrCloseBtnText}>Cerrar Ventana</Text>
             </TouchableOpacity>
-          </View>
+          </ScrollView>
         </View>
       </Modal>
 
@@ -557,73 +1046,671 @@ export default function Visitors() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#1a1a2e", padding: 16 },
-  centered: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#1a1a2e" },
-  validateSection: { marginBottom: 16, padding: 16, backgroundColor: "#16213e", borderRadius: 14, borderWidth: 1, borderColor: "#27ae60" },
-  sectionTitle: { color: "#fff", fontSize: 17, fontWeight: "700", marginBottom: 12 },
-  doorPicker: { marginBottom: 12 },
-  doorsScroll: { flexDirection: "row", marginTop: 6 },
-  doorChip: { paddingHorizontal: 14, paddingVertical: 8, backgroundColor: "#0f3460", borderRadius: 20, marginRight: 8 },
-  doorChipActive: { backgroundColor: "#4a90d9" },
-  doorChipText: { color: "#a0a0a0", fontSize: 13, fontWeight: "500" },
-  doorChipTextActive: { color: "#fff", fontSize: 13, fontWeight: "700" },
-  validateInputRow: { flexDirection: "row", gap: 8, alignItems: "center", marginBottom: 10 },
-  scanCameraBtn: { backgroundColor: "#8e44ad", paddingHorizontal: 12, paddingVertical: 12, borderRadius: 8, justifyContent: "center" },
-  scanCameraBtnText: { color: "#fff", fontWeight: "600", fontSize: 13 },
-  validateBtn: { backgroundColor: "#27ae60", padding: 14, borderRadius: 8, alignItems: "center" },
-  validateBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
-  lastValidationBox: { marginTop: 12, padding: 10, backgroundColor: "rgba(39, 174, 96, 0.15)", borderRadius: 8, borderWidth: 1, borderColor: "#27ae60" },
-  lastValidationTitle: { color: "#2ecc71", fontSize: 12, fontWeight: "600" },
-  lastValidationText: { color: "#fff", fontSize: 14, fontWeight: "600", marginTop: 2 },
-  row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  title: { fontSize: 18, color: "#fff", fontWeight: "700" },
-  addBtn: { backgroundColor: "#4a90d9", paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
-  addBtnText: { color: "#fff", fontWeight: "700" },
-  card: { backgroundColor: "#16213e", borderRadius: 14, padding: 16, marginBottom: 12 },
-  cardTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 },
-  visitorName: { fontSize: 18, color: "#fff", fontWeight: "700" },
-  visitorTypeBadge: { fontSize: 11, color: "#4a90d9", fontWeight: "700", marginTop: 2 },
-  code: { fontSize: 20, color: "#4a90d9", fontWeight: "800", letterSpacing: 2 },
-  meta: { fontSize: 13, color: "#a0a0a0", marginBottom: 4 },
-  cardActions: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: "#223154" },
-  qrBtn: { backgroundColor: "#0f3460", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
-  qrBtnText: { color: "#fff", fontWeight: "600", fontSize: 13 },
-  shareBtn: { backgroundColor: "#25d366", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
-  shareBtnText: { color: "#fff", fontWeight: "700", fontSize: 13 },
-  delBtn: { marginLeft: "auto" },
-  delBtnText: { color: "#e74c3c", fontSize: 13, fontWeight: "600" },
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "center", padding: 20 },
-  modalScroll: { flexGrow: 1, justifyContent: "center" },
-  modalContent: { backgroundColor: "#16213e", borderRadius: 18, padding: 22 },
-  modalTitle: { color: "#fff", fontSize: 20, fontWeight: "700", marginBottom: 16 },
-  inputLabel: { color: "#a0a0a0", fontSize: 13, fontWeight: "600", marginBottom: 6 },
-  input: { backgroundColor: "#0f3460", borderRadius: 8, padding: 12, color: "#fff", marginBottom: 12, fontSize: 15 },
-  typeRow: { flexDirection: "row", gap: 6, marginBottom: 14 },
-  typeChip: { flex: 1, paddingVertical: 8, backgroundColor: "#0f3460", borderRadius: 8, alignItems: "center" },
-  typeChipActive: { backgroundColor: "#4a90d9" },
-  typeChipText: { color: "#888", fontSize: 11, fontWeight: "600" },
-  typeChipTextActive: { color: "#fff", fontSize: 11, fontWeight: "700" },
-  quickDatesRow: { flexDirection: "row", gap: 6, marginBottom: 10 },
-  quickDateBtn: { flex: 1, paddingVertical: 8, backgroundColor: "#0f3460", borderRadius: 8, alignItems: "center" },
-  quickDateText: { color: "#4a90d9", fontSize: 12, fontWeight: "600" },
-  createBtn: { backgroundColor: "#4a90d9", padding: 14, borderRadius: 10, alignItems: "center", marginTop: 10 },
-  createBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
-  cancelBtn: { marginTop: 12, alignItems: "center" },
-  cancelBtnText: { color: "#888", fontSize: 14 },
-  qrModalContent: { backgroundColor: "#ffffff", borderRadius: 20, padding: 24, alignItems: "center" },
-  qrTitle: { color: "#16213e", fontSize: 22, fontWeight: "800", marginBottom: 4 },
-  qrSubtitle: { color: "#666", fontSize: 15, marginBottom: 20 },
-  qrBox: { padding: 16, backgroundColor: "#fff", borderRadius: 12, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 10, elevation: 4 },
-  qrCodeText: { fontSize: 24, fontWeight: "900", letterSpacing: 4, color: "#0f3460", marginTop: 16 },
-  qrMeta: { color: "#666", fontSize: 13, marginTop: 4, textAlign: "center" },
-  qrShareBtn: { backgroundColor: "#25d366", paddingVertical: 14, paddingHorizontal: 20, borderRadius: 12, marginTop: 20, width: "100%", alignItems: "center" },
-  qrShareBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
-  qrCloseBtn: { marginTop: 14, padding: 8 },
-  qrCloseBtnText: { color: "#888", fontSize: 14, fontWeight: "600" },
-  cameraContainer: { flex: 1, backgroundColor: "#000" },
-  cameraOverlay: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.5)" },
-  cameraFrame: { width: 240, height: 240, borderWidth: 2, borderColor: "#27ae60", borderRadius: 16, backgroundColor: "transparent" },
-  cameraInstructions: { color: "#fff", marginTop: 20, fontSize: 15, fontWeight: "600" },
-  cameraCloseBtn: { marginTop: 30, backgroundColor: "#e74c3c", paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10 },
-  cameraCloseBtnText: { color: "#fff", fontWeight: "700" },
+  container: {
+    flex: 1,
+    backgroundColor: Theme.colors.background,
+    padding: Theme.spacing.lg,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: Theme.colors.background,
+  },
+  btnContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  validateSection: {
+    marginBottom: Theme.spacing.lg,
+    padding: Theme.spacing.lg,
+    backgroundColor: Theme.colors.surfaceContainer,
+    borderRadius: Theme.borderRadius.lg,
+    borderWidth: 1,
+    borderColor: "rgba(16, 185, 129, 0.35)",
+  },
+  validateHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: Theme.spacing.md,
+  },
+  sectionTitle: {
+    color: Theme.colors.textPrimary,
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  doorPicker: {
+    marginBottom: Theme.spacing.md,
+  },
+  doorsScroll: {
+    flexDirection: "row",
+    marginTop: 6,
+  },
+  doorChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: Theme.colors.surfaceContainerLow,
+    borderRadius: Theme.borderRadius.full,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+  },
+  doorChipActive: {
+    backgroundColor: Theme.colors.primary,
+    borderColor: Theme.colors.primary,
+  },
+  doorChipText: {
+    color: Theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  doorChipTextActive: {
+    color: Theme.colors.onPrimary,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  validateInputRow: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  scanCameraBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Theme.colors.surfaceContainerHigh,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: Theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: Theme.colors.borderMedium,
+  },
+  scanCameraBtnText: {
+    color: Theme.colors.textPrimary,
+    fontWeight: "600",
+    fontSize: 13,
+  },
+  validateBtn: {
+    backgroundColor: Theme.colors.secondary,
+    paddingVertical: 13,
+    borderRadius: Theme.borderRadius.md,
+    alignItems: "center",
+    shadowColor: Theme.colors.secondary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  validateBtnText: {
+    color: Theme.colors.onSecondary,
+    fontWeight: "700",
+    fontSize: 15,
+  },
+  lastValidationBox: {
+    marginTop: Theme.spacing.md,
+    padding: Theme.spacing.md,
+    backgroundColor: Theme.colors.secondaryContainer,
+    borderRadius: Theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: "rgba(16, 185, 129, 0.4)",
+  },
+  lastValidationHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  lastValidationTitle: {
+    color: Theme.colors.secondaryLight,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  lastValidationText: {
+    color: Theme.colors.textPrimary,
+    fontSize: 13,
+    fontWeight: "600",
+    marginTop: 2,
+  },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: Theme.spacing.md,
+  },
+  screenHeading: {
+    fontSize: 18,
+    color: Theme.colors.textPrimary,
+    fontWeight: "700",
+    letterSpacing: -0.3,
+  },
+  screenSubheading: {
+    fontSize: 12,
+    color: Theme.colors.textMuted,
+  },
+  addBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Theme.colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: Theme.borderRadius.md,
+    shadowColor: Theme.colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  addBtnText: {
+    color: Theme.colors.onPrimary,
+    fontWeight: "600",
+    fontSize: 13,
+  },
+  card: {
+    backgroundColor: Theme.colors.surfaceContainer,
+    borderRadius: Theme.borderRadius.lg,
+    padding: Theme.spacing.lg,
+    marginBottom: Theme.spacing.md,
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+  },
+  cardTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  visitorMetaCol: {
+    flex: 1,
+  },
+  visitorName: {
+    fontSize: 16,
+    color: Theme.colors.textPrimary,
+    fontWeight: "700",
+  },
+  visitorTypeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Theme.borderRadius.sm,
+    marginTop: 4,
+  },
+  visitorTypeText: {
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  codeBadge: {
+    backgroundColor: Theme.colors.surfaceContainerLow,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: Theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: Theme.colors.borderMedium,
+  },
+  codeText: {
+    fontSize: 16,
+    color: Theme.colors.primaryLight,
+    fontWeight: "800",
+    letterSpacing: 1.5,
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+  },
+  metaDivider: {
+    height: 1,
+    backgroundColor: Theme.colors.border,
+    marginVertical: Theme.spacing.md,
+  },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    marginBottom: 6,
+  },
+  metaItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  metaText: {
+    fontSize: 12,
+    color: Theme.colors.textSecondary,
+  },
+  cardActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: Theme.spacing.md,
+    paddingTop: Theme.spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Theme.colors.border,
+  },
+  qrActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Theme.colors.surfaceContainerLow,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: Theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+  },
+  qrActionBtnText: {
+    color: Theme.colors.primaryLight,
+    fontWeight: "600",
+    fontSize: 12,
+  },
+  shareImageActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Theme.colors.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: Theme.borderRadius.md,
+  },
+  shareImageActionBtnText: {
+    color: Theme.colors.onPrimary,
+    fontWeight: "600",
+    fontSize: 12,
+  },
+  shareTextActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Theme.colors.surfaceContainerLow,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: Theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+  },
+  shareTextActionBtnText: {
+    color: "#25D366",
+    fontWeight: "600",
+    fontSize: 12,
+  },
+  delActionBtn: {
+    marginLeft: "auto",
+    padding: 6,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(1, 15, 31, 0.85)",
+    justifyContent: "center",
+    padding: Theme.spacing.lg,
+  },
+  modalScroll: {
+    flexGrow: 1,
+    justifyContent: "center",
+  },
+  modalContent: {
+    backgroundColor: Theme.colors.surfaceContainerHigh,
+    borderRadius: Theme.borderRadius.xl,
+    padding: Theme.spacing.xl,
+    borderWidth: 1,
+    borderColor: Theme.colors.borderMedium,
+  },
+  modalTopHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: Theme.spacing.lg,
+  },
+  modalTitle: {
+    color: Theme.colors.textPrimary,
+    fontSize: 19,
+    fontWeight: "700",
+  },
+  inputLabel: {
+    color: Theme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  input: {
+    backgroundColor: Theme.colors.surfaceContainerLow,
+    borderRadius: Theme.borderRadius.md,
+    padding: 12,
+    color: Theme.colors.textPrimary,
+    marginBottom: Theme.spacing.md,
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+  },
+  typeRow: {
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: Theme.spacing.md,
+  },
+  typeChip: {
+    flex: 1,
+    paddingVertical: 8,
+    backgroundColor: Theme.colors.surfaceContainerLow,
+    borderRadius: Theme.borderRadius.md,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+  },
+  typeChipActive: {
+    backgroundColor: Theme.colors.primary,
+    borderColor: Theme.colors.primary,
+  },
+  typeChipText: {
+    color: Theme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  typeChipTextActive: {
+    color: Theme.colors.onPrimary,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  quickDatesRow: {
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: 8,
+  },
+  quickDateBtn: {
+    flex: 1,
+    paddingVertical: 7,
+    backgroundColor: Theme.colors.surfaceContainerLow,
+    borderRadius: Theme.borderRadius.sm,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+  },
+  quickDateText: {
+    color: Theme.colors.primaryLight,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  createBtn: {
+    backgroundColor: Theme.colors.primary,
+    paddingVertical: 14,
+    borderRadius: Theme.borderRadius.md,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  createBtnText: {
+    color: Theme.colors.onPrimary,
+    fontWeight: "600",
+    fontSize: 15,
+  },
+  cancelBtn: {
+    marginTop: Theme.spacing.md,
+    alignItems: "center",
+    paddingVertical: 6,
+  },
+  cancelBtnText: {
+    color: Theme.colors.textMuted,
+    fontSize: 14,
+  },
+  qrModalScroll: {
+    flexGrow: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: Theme.spacing.xl,
+  },
+  // Diseño de Pase Digital Capturable
+  passDesignCard: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: Theme.colors.surfaceContainer,
+    borderRadius: Theme.borderRadius.xl,
+    padding: Theme.spacing.xl,
+    borderWidth: 1.5,
+    borderColor: "rgba(59, 130, 246, 0.35)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  passHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  passLogoBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: Theme.borderRadius.md,
+    backgroundColor: Theme.colors.surfaceContainerHigh,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Theme.colors.borderMedium,
+    marginRight: Theme.spacing.md,
+  },
+  passHeaderMeta: {
+    flex: 1,
+  },
+  passBrandRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  passResidencialName: {
+    color: Theme.colors.textPrimary,
+    fontSize: 16,
+    fontWeight: "700",
+    letterSpacing: -0.3,
+  },
+  passVerifiedDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Theme.colors.secondary,
+  },
+  passSubtitle: {
+    color: Theme.colors.primaryLight,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 1,
+    marginTop: 2,
+  },
+  passDivider: {
+    height: 1,
+    backgroundColor: Theme.colors.border,
+    marginVertical: Theme.spacing.md,
+  },
+  passInfoSection: {
+    marginBottom: Theme.spacing.md,
+  },
+  passRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 6,
+  },
+  passCol: {
+    flex: 1,
+    marginRight: 8,
+  },
+  passInfoLabel: {
+    fontSize: 9,
+    color: Theme.colors.textMuted,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+  },
+  passVisitorName: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: Theme.colors.textPrimary,
+    marginTop: 2,
+  },
+  passUnitBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Theme.colors.surfaceContainerHigh,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: Theme.borderRadius.sm,
+    borderWidth: 1,
+    borderColor: Theme.colors.borderMedium,
+  },
+  passUnitText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.colors.primaryLight,
+  },
+  passTagsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 4,
+  },
+  passTagPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Theme.colors.surfaceContainerLow,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Theme.borderRadius.sm,
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+  },
+  passTagPillText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.colors.textSecondary,
+  },
+  passQrContainer: {
+    alignItems: "center",
+    marginVertical: Theme.spacing.sm,
+  },
+  passQrWrapper: {
+    padding: 14,
+    backgroundColor: "#FFFFFF",
+    borderRadius: Theme.borderRadius.lg,
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  passCodeBadge: {
+    backgroundColor: Theme.colors.surfaceContainerLow,
+    paddingHorizontal: 16,
+    paddingVertical: 5,
+    borderRadius: Theme.borderRadius.md,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: Theme.colors.borderMedium,
+  },
+  passCodeDigits: {
+    fontSize: 20,
+    fontWeight: "800",
+    letterSpacing: 4,
+    color: Theme.colors.primaryLight,
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+  },
+  passFooterInfo: {
+    backgroundColor: Theme.colors.surfaceContainerLow,
+    borderRadius: Theme.borderRadius.md,
+    padding: Theme.spacing.md,
+    marginTop: Theme.spacing.md,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+  },
+  passMetaItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  passMetaText: {
+    fontSize: 12,
+    color: Theme.colors.textSecondary,
+    fontWeight: "500",
+  },
+  passInstructionBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: Theme.spacing.md,
+    paddingTop: Theme.spacing.xs,
+  },
+  passInstructionText: {
+    fontSize: 10,
+    color: Theme.colors.textMuted,
+    textAlign: "center",
+    flex: 1,
+  },
+  qrActionsWrapper: {
+    width: "100%",
+    maxWidth: 360,
+    marginTop: Theme.spacing.lg,
+    gap: 10,
+  },
+  qrShareImageBtn: {
+    backgroundColor: Theme.colors.primary,
+    paddingVertical: 14,
+    borderRadius: Theme.borderRadius.md,
+    width: "100%",
+    alignItems: "center",
+    shadowColor: Theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  qrShareImageBtnText: {
+    color: Theme.colors.onPrimary,
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  qrShareTextBtn: {
+    backgroundColor: "#25D366",
+    paddingVertical: 13,
+    borderRadius: Theme.borderRadius.md,
+    width: "100%",
+    alignItems: "center",
+  },
+  qrShareTextBtnText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  qrCloseBtn: {
+    marginTop: Theme.spacing.md,
+    padding: 8,
+  },
+  qrCloseBtnText: {
+    color: Theme.colors.textMuted,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  cameraContainer: {
+    flex: 1,
+    backgroundColor: "#000000",
+  },
+  cameraOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.6)",
+  },
+  cameraFrame: {
+    width: 240,
+    height: 240,
+    borderWidth: 2,
+    borderColor: Theme.colors.secondary,
+    borderRadius: 20,
+    backgroundColor: "transparent",
+  },
+  cameraInstructions: {
+    color: Theme.colors.textPrimary,
+    marginTop: 24,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  cameraCloseBtn: {
+    marginTop: 32,
+    backgroundColor: Theme.colors.error,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: Theme.borderRadius.md,
+  },
+  cameraCloseBtnText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+  },
 });

@@ -13,7 +13,9 @@ import {
 import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import * as Google from "expo-auth-session/providers/google";
+import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
+import { Theme } from "../constants/theme";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -67,7 +69,6 @@ export default function Login() {
     if (isRealGoogleConfigured) {
       promptAsync();
     } else {
-      // Modo desarrollo asistido: Permite probar la autenticación y el rechazo 403 sin requerir credenciales inmediatas de Google Cloud
       Alert.alert(
         "Google Sign-In (Modo Prueba)",
         "Para conectar Google real, define EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID en mobile/.env.\n\nSelecciona una opción para probar la integración:",
@@ -112,42 +113,59 @@ export default function Login() {
       style={styles.container}
     >
       <View style={styles.card}>
-        <Text style={styles.title}>Seguridad Residencial</Text>
-        <Text style={styles.subtitle}>Inicia sesión</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor="#888"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          editable={!submitting && !googleSubmitting}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Contraseña"
-          placeholderTextColor="#888"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          editable={!submitting && !googleSubmitting}
-        />
+        <View style={styles.logoBadge}>
+          <Ionicons name="shield-checkmark" size={32} color={Theme.colors.primary} />
+        </View>
+
+        <Text style={styles.title}>Residia</Text>
+        <Text style={styles.subtitle}>Seguridad Residencial & Control de Acceso</Text>
+
+        <View style={styles.inputContainer}>
+          <Ionicons name="mail-outline" size={20} color={Theme.colors.textMuted} style={styles.inputIcon} />
+          <TextInput
+            style={styles.input}
+            placeholder="Correo electrónico"
+            placeholderTextColor={Theme.colors.textMuted}
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            editable={!submitting && !googleSubmitting}
+          />
+        </View>
+
+        <View style={styles.inputContainer}>
+          <Ionicons name="lock-closed-outline" size={20} color={Theme.colors.textMuted} style={styles.inputIcon} />
+          <TextInput
+            style={styles.input}
+            placeholder="Contraseña"
+            placeholderTextColor={Theme.colors.textMuted}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            editable={!submitting && !googleSubmitting}
+          />
+        </View>
+
         <TouchableOpacity
           style={[styles.button, submitting && styles.buttonDisabled]}
           onPress={handleLogin}
           disabled={submitting || googleSubmitting}
+          activeOpacity={0.85}
         >
           {submitting ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={Theme.colors.onPrimary} />
           ) : (
-            <Text style={styles.buttonText}>Entrar con Email</Text>
+            <View style={styles.buttonContent}>
+              <Ionicons name="log-in-outline" size={20} color={Theme.colors.onPrimary} style={{ marginRight: 8 }} />
+              <Text style={styles.buttonText}>Iniciar Sesión</Text>
+            </View>
           )}
         </TouchableOpacity>
 
         <View style={styles.dividerContainer}>
           <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>o bien</Text>
+          <Text style={styles.dividerText}>o autenticar con</Text>
           <View style={styles.dividerLine} />
         </View>
 
@@ -155,14 +173,13 @@ export default function Login() {
           style={[styles.googleButton, googleSubmitting && styles.buttonDisabled]}
           onPress={handleGooglePress}
           disabled={submitting || googleSubmitting}
+          activeOpacity={0.85}
         >
           {googleSubmitting ? (
-            <ActivityIndicator color="#1a1a2e" />
+            <ActivityIndicator color={Theme.colors.surface} />
           ) : (
             <View style={styles.googleContent}>
-              <View style={styles.googleBadge}>
-                <Text style={styles.googleBadgeText}>G</Text>
-              </View>
+              <Ionicons name="logo-google" size={20} color="#EA4335" style={{ marginRight: 10 }} />
               <Text style={styles.googleButtonText}>Continuar con Google</Text>
             </View>
           )}
@@ -175,93 +192,119 @@ export default function Login() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#1a1a2e",
+    backgroundColor: Theme.colors.background,
     justifyContent: "center",
-    padding: 24,
+    padding: Theme.spacing.xxl,
   },
   card: {
-    backgroundColor: "#16213e",
-    borderRadius: 16,
-    padding: 24,
+    backgroundColor: Theme.colors.surfaceContainer,
+    borderRadius: Theme.borderRadius.xl,
+    padding: Theme.spacing.xxl,
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+    alignItems: "center",
+  },
+  logoBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: Theme.borderRadius.lg,
+    backgroundColor: Theme.colors.surfaceContainerHigh,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: Theme.spacing.md,
+    borderWidth: 1,
+    borderColor: Theme.colors.borderMedium,
   },
   title: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: "700",
-    color: "#fff",
+    color: Theme.colors.textPrimary,
     textAlign: "center",
-    marginBottom: 4,
+    letterSpacing: -0.5,
   },
   subtitle: {
-    fontSize: 16,
-    color: "#a0a0a0",
+    fontSize: 13,
+    color: Theme.colors.textSecondary,
     textAlign: "center",
-    marginBottom: 24,
+    marginTop: 4,
+    marginBottom: Theme.spacing.xxl,
+  },
+  inputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Theme.colors.surfaceContainerLow,
+    borderRadius: Theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+    paddingHorizontal: Theme.spacing.md,
+    marginBottom: Theme.spacing.md,
+    width: "100%",
+  },
+  inputIcon: {
+    marginRight: 8,
   },
   input: {
-    backgroundColor: "#0f3460",
-    borderRadius: 12,
-    padding: 14,
-    color: "#fff",
-    fontSize: 16,
-    marginBottom: 12,
+    flex: 1,
+    paddingVertical: 14,
+    color: Theme.colors.textPrimary,
+    fontSize: 15,
   },
   button: {
-    backgroundColor: "#4a90d9",
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: Theme.colors.primary,
+    borderRadius: Theme.borderRadius.md,
+    paddingVertical: 14,
     alignItems: "center",
-    marginTop: 8,
+    justifyContent: "center",
+    width: "100%",
+    marginTop: 6,
+    shadowColor: Theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 4,
   },
-  buttonDisabled: { opacity: 0.7 },
+  buttonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  buttonDisabled: { opacity: 0.6 },
   buttonText: {
-    color: "#fff",
-    fontSize: 16,
+    color: Theme.colors.onPrimary,
+    fontSize: 15,
     fontWeight: "600",
   },
   dividerContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginVertical: 20,
+    marginVertical: Theme.spacing.xl,
+    width: "100%",
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: "#2a3b5c",
+    backgroundColor: Theme.colors.border,
   },
   dividerText: {
-    color: "#888",
-    paddingHorizontal: 12,
-    fontSize: 13,
+    color: Theme.colors.textMuted,
+    paddingHorizontal: Theme.spacing.md,
+    fontSize: 12,
   },
   googleButton: {
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    padding: 14,
+    backgroundColor: "#FFFFFF",
+    borderRadius: Theme.borderRadius.md,
+    paddingVertical: 14,
     alignItems: "center",
     justifyContent: "center",
+    width: "100%",
   },
   googleContent: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
   },
-  googleBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "#ea4335",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 10,
-  },
-  googleBadgeText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 14,
-  },
   googleButtonText: {
-    color: "#1a1a2e",
-    fontSize: 16,
+    color: "#0F172A",
+    fontSize: 15,
     fontWeight: "600",
   },
 });

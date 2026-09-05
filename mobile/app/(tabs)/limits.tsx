@@ -11,7 +11,9 @@ import {
   RefreshControl,
   Modal,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import api from "../../services/api";
+import { Theme } from "../../constants/theme";
 
 interface OpeningLimit {
   id: string;
@@ -59,7 +61,7 @@ export default function Limits() {
       setMaxOpenings("20");
       setPeriod("day");
       fetchLimits();
-    } catch (e) {
+    } catch {
       Alert.alert("Error", "No se pudo crear el límite");
     } finally {
       setSubmitting(false);
@@ -67,7 +69,7 @@ export default function Limits() {
   };
 
   const deleteLimit = (id: string) => {
-    Alert.alert("Eliminar", "¿Quitar este límite?", [
+    Alert.alert("Eliminar", "¿Quitar este límite de aperturas?", [
       { text: "Cancelar", style: "cancel" },
       {
         text: "Eliminar",
@@ -87,67 +89,130 @@ export default function Limits() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4a90d9" />
+        <ActivityIndicator size="large" color={Theme.colors.primary} />
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.addBtn} onPress={() => setModalVisible(true)}>
-        <Text style={styles.addBtnText}>+ Nuevo límite</Text>
+      {/* Action Header Button */}
+      <TouchableOpacity
+        style={styles.addBtn}
+        onPress={() => setModalVisible(true)}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="add-circle-outline" size={20} color={Theme.colors.onPrimary} style={{ marginRight: 8 }} />
+        <Text style={styles.addBtnText}>Nuevo Límite de Aperturas</Text>
       </TouchableOpacity>
+
       <FlatList
         data={limits}
         keyExtractor={(item) => item.id}
+        contentContainerStyle={{ paddingBottom: 24 }}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchLimits(); }} />
+          <RefreshControl
+            refreshing={refreshing}
+            tintColor={Theme.colors.primary}
+            onRefresh={() => {
+              setRefreshing(true);
+              fetchLimits();
+            }}
+          />
         }
         renderItem={({ item }) => (
           <View style={styles.card}>
-            <Text style={styles.rule}>
-              Máx. {item.maxOpenings} aperturas por {item.period === "day" ? "día" : "mes"}
-            </Text>
-            <Text style={styles.meta}>
-              {item.unitId ? `Unidad ${item.unitId}` : "Todas las unidades"} · {item.doorId ? `Puerta ${item.doorId}` : "Todas las puertas"}
-            </Text>
-            <TouchableOpacity style={styles.delBtn} onPress={() => deleteLimit(item.id)}>
-              <Text style={styles.delBtnText}>Eliminar</Text>
-            </TouchableOpacity>
+            <View style={styles.cardTop}>
+              <View style={styles.ruleIconBadge}>
+                <Ionicons name="speedometer-outline" size={22} color={Theme.colors.primaryLight} />
+              </View>
+              <View style={styles.cardContent}>
+                <Text style={styles.rule}>
+                  Máx. {item.maxOpenings} aperturas por {item.period === "day" ? "día" : "mes"}
+                </Text>
+                <View style={styles.metaRow}>
+                  <Ionicons name="layers-outline" size={13} color={Theme.colors.textMuted} />
+                  <Text style={styles.meta}>
+                    {item.unitId ? `Unidad ${item.unitId}` : "Todas las unidades"} •{" "}
+                    {item.doorId ? `Puerta ${item.doorId}` : "Todas las puertas"}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.cardActions}>
+              <TouchableOpacity
+                style={styles.delBtn}
+                onPress={() => deleteLimit(item.id)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="trash-outline" size={15} color={Theme.colors.errorLight} style={{ marginRight: 4 }} />
+                <Text style={styles.delBtnText}>Eliminar regla</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
       />
 
-      <Modal visible={modalVisible} transparent animationType="slide">
+      {/* Modal Crear Límite */}
+      <Modal visible={modalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Nuevo límite de aperturas</Text>
+            <View style={styles.modalHeader}>
+              <Ionicons name="options-outline" size={24} color={Theme.colors.primary} />
+              <Text style={styles.modalTitle}>Definir Límite de Aperturas</Text>
+            </View>
+
+            <Text style={styles.inputLabel}>MÁXIMO DE APERTURAS</Text>
             <TextInput
               style={styles.input}
-              placeholder="Máximo de aperturas"
-              placeholderTextColor="#888"
+              placeholder="Ej. 20"
+              placeholderTextColor={Theme.colors.textMuted}
               value={maxOpenings}
               onChangeText={setMaxOpenings}
               keyboardType="number-pad"
             />
+
+            <Text style={styles.inputLabel}>PERIODO DE TIEMPO</Text>
             <View style={styles.periodRow}>
               <TouchableOpacity
                 style={[styles.periodBtn, period === "day" && styles.periodBtnActive]}
                 onPress={() => setPeriod("day")}
+                activeOpacity={0.8}
               >
-                <Text style={period === "day" ? styles.periodBtnTextActive : styles.periodBtnText}>Por día</Text>
+                <Text style={period === "day" ? styles.periodBtnTextActive : styles.periodBtnText}>
+                  Por Día
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.periodBtn, period === "month" && styles.periodBtnActive]}
                 onPress={() => setPeriod("month")}
+                activeOpacity={0.8}
               >
-                <Text style={period === "month" ? styles.periodBtnTextActive : styles.periodBtnText}>Por mes</Text>
+                <Text style={period === "month" ? styles.periodBtnTextActive : styles.periodBtnText}>
+                  Por Mes
+                </Text>
               </TouchableOpacity>
             </View>
-            <TouchableOpacity style={styles.submitBtn} onPress={addLimit} disabled={submitting}>
-              {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Crear</Text>}
+
+            <TouchableOpacity
+              style={styles.submitBtn}
+              onPress={addLimit}
+              disabled={submitting}
+              activeOpacity={0.85}
+            >
+              {submitting ? (
+                <ActivityIndicator color={Theme.colors.onPrimary} />
+              ) : (
+                <Text style={styles.submitBtnText}>Guardar Regla</Text>
+              )}
             </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)}>
+
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={() => setModalVisible(false)}
+              activeOpacity={0.8}
+            >
               <Text style={styles.cancelBtnText}>Cancelar</Text>
             </TouchableOpacity>
           </View>
@@ -158,26 +223,179 @@ export default function Limits() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#1a1a2e", padding: 16 },
-  centered: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#1a1a2e" },
-  addBtn: { backgroundColor: "#4a90d9", padding: 14, borderRadius: 12, alignItems: "center", marginBottom: 16 },
-  addBtnText: { color: "#fff", fontWeight: "600", fontSize: 16 },
-  card: { backgroundColor: "#16213e", borderRadius: 12, padding: 16, marginBottom: 12 },
-  rule: { fontSize: 16, color: "#fff", fontWeight: "600", marginBottom: 4 },
-  meta: { fontSize: 12, color: "#888", marginBottom: 8 },
-  delBtn: { alignSelf: "flex-start" },
-  delBtnText: { color: "#e74c3c", fontSize: 14 },
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", padding: 24 },
-  modalContent: { backgroundColor: "#16213e", borderRadius: 16, padding: 24 },
-  modalTitle: { color: "#fff", fontSize: 20, fontWeight: "700", marginBottom: 16 },
-  input: { backgroundColor: "#0f3460", borderRadius: 8, padding: 12, color: "#fff", marginBottom: 12 },
-  periodRow: { flexDirection: "row", gap: 12, marginBottom: 16 },
-  periodBtn: { flex: 1, padding: 12, backgroundColor: "#0f3460", borderRadius: 8, alignItems: "center" },
-  periodBtnActive: { backgroundColor: "#4a90d9" },
-  periodBtnText: { color: "#888" },
-  periodBtnTextActive: { color: "#fff", fontWeight: "600" },
-  submitBtn: { backgroundColor: "#4a90d9", padding: 14, borderRadius: 8, alignItems: "center" },
-  submitBtnText: { color: "#fff", fontWeight: "600" },
-  cancelBtn: { marginTop: 12, alignItems: "center" },
-  cancelBtnText: { color: "#888" },
+  container: {
+    flex: 1,
+    backgroundColor: Theme.colors.background,
+    padding: Theme.spacing.lg,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: Theme.colors.background,
+  },
+  addBtn: {
+    flexDirection: "row",
+    backgroundColor: Theme.colors.primary,
+    paddingVertical: 14,
+    borderRadius: Theme.borderRadius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: Theme.spacing.lg,
+    shadowColor: Theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  addBtnText: {
+    color: Theme.colors.onPrimary,
+    fontWeight: "600",
+    fontSize: 15,
+  },
+  card: {
+    backgroundColor: Theme.colors.surfaceContainer,
+    borderRadius: Theme.borderRadius.lg,
+    padding: Theme.spacing.lg,
+    marginBottom: Theme.spacing.md,
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+  },
+  cardTop: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  ruleIconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: Theme.borderRadius.md,
+    backgroundColor: Theme.colors.surfaceContainerHigh,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Theme.colors.borderMedium,
+    marginRight: Theme.spacing.md,
+  },
+  cardContent: {
+    flex: 1,
+  },
+  rule: {
+    fontSize: 16,
+    color: Theme.colors.textPrimary,
+    fontWeight: "700",
+    letterSpacing: -0.2,
+  },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 4,
+  },
+  meta: {
+    fontSize: 12,
+    color: Theme.colors.textSecondary,
+  },
+  cardActions: {
+    marginTop: Theme.spacing.md,
+    paddingTop: Theme.spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Theme.colors.border,
+  },
+  delBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+  },
+  delBtnText: {
+    color: Theme.colors.errorLight,
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(1, 15, 31, 0.75)",
+    justifyContent: "center",
+    padding: Theme.spacing.xxl,
+  },
+  modalContent: {
+    backgroundColor: Theme.colors.surfaceContainerHigh,
+    borderRadius: Theme.borderRadius.xl,
+    padding: Theme.spacing.xl,
+    borderWidth: 1,
+    borderColor: Theme.colors.borderMedium,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: Theme.spacing.lg,
+  },
+  modalTitle: {
+    color: Theme.colors.textPrimary,
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  inputLabel: {
+    color: Theme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  input: {
+    backgroundColor: Theme.colors.surfaceContainerLow,
+    borderRadius: Theme.borderRadius.md,
+    padding: 12,
+    color: Theme.colors.textPrimary,
+    marginBottom: Theme.spacing.md,
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+    fontSize: 15,
+  },
+  periodRow: {
+    flexDirection: "row",
+    gap: Theme.spacing.md,
+    marginBottom: Theme.spacing.xl,
+  },
+  periodBtn: {
+    flex: 1,
+    padding: 12,
+    backgroundColor: Theme.colors.surfaceContainerLow,
+    borderRadius: Theme.borderRadius.md,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+  },
+  periodBtnActive: {
+    backgroundColor: Theme.colors.primary,
+    borderColor: Theme.colors.primary,
+  },
+  periodBtnText: {
+    color: Theme.colors.textSecondary,
+    fontWeight: "500",
+  },
+  periodBtnTextActive: {
+    color: Theme.colors.onPrimary,
+    fontWeight: "700",
+  },
+  submitBtn: {
+    backgroundColor: Theme.colors.primary,
+    paddingVertical: 14,
+    borderRadius: Theme.borderRadius.md,
+    alignItems: "center",
+  },
+  submitBtnText: {
+    color: Theme.colors.onPrimary,
+    fontWeight: "600",
+    fontSize: 15,
+  },
+  cancelBtn: {
+    marginTop: Theme.spacing.md,
+    alignItems: "center",
+    paddingVertical: 6,
+  },
+  cancelBtnText: {
+    color: Theme.colors.textMuted,
+    fontSize: 14,
+  },
 });

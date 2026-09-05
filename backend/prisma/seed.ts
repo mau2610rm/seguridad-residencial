@@ -101,6 +101,94 @@ async function main() {
     },
   });
 
+  // Pagos de prueba para el residente
+  await prisma.payment.upsert({
+    where: { id: "seed-payment-1" },
+    update: {},
+    create: {
+      id: "seed-payment-1",
+      unitId: unit.id,
+      concept: "Mantenimiento Octubre 2026",
+      amount: 1250.0,
+      dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
+      status: "pendiente",
+    },
+  });
+
+  await prisma.payment.upsert({
+    where: { id: "seed-payment-2" },
+    update: {},
+    create: {
+      id: "seed-payment-2",
+      unitId: unit.id,
+      concept: "Fondo de Reserva de Seguridad",
+      amount: 450.0,
+      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      status: "pendiente",
+    },
+  });
+
+  await prisma.payment.upsert({
+    where: { id: "seed-payment-3" },
+    update: {},
+    create: {
+      id: "seed-payment-3",
+      unitId: unit.id,
+      concept: "Mantenimiento Septiembre 2026",
+      amount: 1250.0,
+      dueDate: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000),
+      status: "pagado",
+      paidAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
+      reference: "STRIPE_REC_98124",
+    },
+  });
+
+  // Incidentes de prueba con diferentes estados
+  await prisma.incident.upsert({
+    where: { id: "seed-incident-1" },
+    update: {},
+    create: {
+      id: "seed-incident-1",
+      type: "Falla de luminaria",
+      description: "Lámpara del pasillo parpadea constantemente frente a la unidad 101.",
+      location: "Pasillo Torre A",
+      status: "reportado",
+      reportedById: residente.id,
+      residencialId: residencial.id,
+    },
+  });
+
+  await prisma.incident.upsert({
+    where: { id: "seed-incident-2" },
+    update: {},
+    create: {
+      id: "seed-incident-2",
+      type: "Ruido en portón",
+      description: "El brazo del motor del portón rechina al abrirse por las mañanas.",
+      location: "Puerta principal",
+      status: "en_progreso",
+      reportedById: guardia.id,
+      residencialId: residencial.id,
+    },
+  });
+
+  await prisma.incident.upsert({
+    where: { id: "seed-incident-3" },
+    update: {},
+    create: {
+      id: "seed-incident-3",
+      type: "Fuga de agua",
+      description: "Aspersor dañado tirando agua sobre la banqueta.",
+      location: "Jardín Central",
+      status: "resuelto",
+      resolutionNotes: "Se sustituyó la boquilla del aspersor y se calibró la presión.",
+      resolvedAt: new Date(),
+      resolvedById: admin.id,
+      reportedById: residente.id,
+      residencialId: residencial.id,
+    },
+  });
+
   console.log("Seed OK:", { residencial: residencial.nombre, door1: door1.name, door2: door2.name });
   console.log("Usuarios: admin@demo.com, residente@demo.com, guardia@demo.com / password: password123");
 }
