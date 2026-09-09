@@ -14,4 +14,11 @@ export const config = {
     publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || "",
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "",
   },
+  mqtt: {
+    brokerUrl: process.env.MQTT_BROKER_URL || "mqtt://localhost:1883",
+    username: process.env.MQTT_USERNAME || undefined,
+    password: process.env.MQTT_PASSWORD || undefined,
+    reconnectPeriodMs: 5000,
+    connectTimeoutMs: 10000,
+  },
 };

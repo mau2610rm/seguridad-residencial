@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { getAccessToken, clearTokens, setTokens } from "../services/api";
 import api from "../services/api";
 
-export type Role = "admin_residencial" | "guardia" | "residente";
+export type Role = "super_admin" | "admin_residencial" | "guardia" | "residente";
 
 export interface User {
   id: string;
@@ -10,9 +10,9 @@ export interface User {
   name: string | null;
   avatarUrl?: string | null;
   role: Role;
-  residencialId: string;
+  residencialId?: string | null;
   unitId: string | null;
-  residencial: { id: string; nombre: string } | null;
+  residencial: { id: string; nombre: string; status?: string } | null;
   unit: { id: string; number: string } | null;
 }
 

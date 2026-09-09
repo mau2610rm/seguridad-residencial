@@ -25,19 +25,21 @@ router.get("/", requireRoles("admin_residencial"), async (req: AuthRequest, res:
   return res.json(limits);
 });
 
-router.put("/", requireRoles("admin_residencial"), async (req: AuthRequest, res: Response) => {
-  if (!req.user) return res.status(401).json({ error: "No autenticado" });
+router.post("/", async (req: AuthRequest, res: Response) => {
+  if (!req.user || !req.user.residencialId) {
+    return res.status(401).json({ error: "No autenticado o sin residencial asignado" });
+  }
   try {
     const body = putLimitSchema.parse(req.body);
     if (body.unitId) {
       const unit = await prisma.unit.findFirst({
-        where: { id: body.unitId, residencialId: req.user!.residencialId },
+        where: { id: body.unitId, residencialId: req.user.residencialId },
       });
       if (!unit) return res.status(404).json({ error: "Unidad no encontrada" });
     }
     if (body.doorId) {
       const door = await prisma.door.findFirst({
-        where: { id: body.doorId, residencialId: req.user!.residencialId },
+        where: { id: body.doorId, residencialId: req.user.residencialId },
       });
       if (!door) return res.status(404).json({ error: "Puerta no encontrada" });
     }

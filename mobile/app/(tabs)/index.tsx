@@ -15,6 +15,8 @@ export default function Home() {
 
   const getRoleLabel = (role?: string) => {
     switch (role) {
+      case "super_admin":
+        return "Super Usuario • Control Global";
       case "admin_residencial":
         return "Administrador Residencial";
       case "guardia":
@@ -106,6 +108,31 @@ export default function Home() {
           </Text>
         </View>
       </View>
+
+      {/* Super Admin Direct Access Tile */}
+      {user?.role === "super_admin" && (
+        <TouchableOpacity
+          style={styles.superAdminShortcut}
+          onPress={() => router.push("/(tabs)/superadmin")}
+          activeOpacity={0.85}
+        >
+          <View style={styles.superAdminShortcutIcon}>
+            <Ionicons name="shield-half" size={24} color="#F59E0B" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Text style={styles.superAdminShortcutTitle}>Panel Maestro SuperAdmin</Text>
+              <View style={styles.shortcutLiveTag}>
+                <Text style={styles.shortcutLiveText}>MASTER</Text>
+              </View>
+            </View>
+            <Text style={styles.superAdminShortcutDesc}>
+              Control global de fraccionamientos, hardware IoT y cobranza.
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="#F59E0B" />
+        </TouchableOpacity>
+      )}
 
       {/* Logout Action Button */}
       <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.85}>
@@ -323,5 +350,46 @@ const styles = StyleSheet.create({
     color: Theme.colors.errorLight,
     fontSize: 14,
     fontWeight: "600",
+  },
+  superAdminShortcut: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(245, 158, 11, 0.08)",
+    borderRadius: Theme.borderRadius.lg,
+    padding: Theme.spacing.md,
+    borderWidth: 1.5,
+    borderColor: "rgba(245, 158, 11, 0.35)",
+    marginBottom: Theme.spacing.lg,
+  },
+  superAdminShortcutIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: Theme.borderRadius.md,
+    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: Theme.spacing.md,
+  },
+  superAdminShortcutTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Theme.colors.textPrimary,
+  },
+  shortcutLiveTag: {
+    backgroundColor: "#F59E0B",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: Theme.borderRadius.sm,
+  },
+  shortcutLiveText: {
+    color: "#051424",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+  superAdminShortcutDesc: {
+    fontSize: 11,
+    color: Theme.colors.textMuted,
+    marginTop: 2,
   },
 });

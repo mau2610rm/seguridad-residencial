@@ -6,6 +6,7 @@ import { Theme } from "../../constants/theme";
 export default function TabsLayout() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin_residencial";
+  const isSuperAdmin = user?.role === "super_admin";
 
   return (
     <Tabs
@@ -120,6 +121,21 @@ export default function TabsLayout() {
               name={focused ? "options" : "options-outline"}
               size={size - 1}
               color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="superadmin"
+        options={{
+          title: "Super Admin",
+          tabBarLabel: "Super Admin",
+          href: isSuperAdmin ? "/superadmin" : null,
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "shield-half" : "shield-half-outline"}
+              size={size - 1}
+              color={focused ? "#F59E0B" : color}
             />
           ),
         }}

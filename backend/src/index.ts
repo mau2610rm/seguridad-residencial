@@ -10,6 +10,9 @@ import incidentsRoutes from "./routes/incidents";
 import paymentsRoutes from "./routes/payments";
 import limitsRoutes from "./routes/limits";
 import unitsRoutes from "./routes/units";
+import superadminRoutes from "./routes/superadmin";
+
+import { embeddedBroker } from "./services/embeddedBroker";
 
 const app = express();
 app.use(helmet());
@@ -24,6 +27,7 @@ app.use("/incidents", incidentsRoutes);
 app.use("/payments", paymentsRoutes);
 app.use("/limits", limitsRoutes);
 app.use("/units", unitsRoutes);
+app.use("/superadmin", superadminRoutes);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
@@ -32,6 +36,12 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   res.status(500).json({ error: "Error interno del servidor" });
 });
 
-app.listen(config.port, () => {
-  console.log(`API escuchando en http://localhost:${config.port}`);
-});
+async function bootstrap() {
+  await embeddedBroker.start();
+  app.listen(config.port, () => {
+    console.log(`API escuchando en http://localhost:${config.port}`);
+  });
+}
+
+bootstrap();
+

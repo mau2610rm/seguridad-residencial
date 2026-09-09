@@ -4,35 +4,121 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
+  const passwordHash = await bcrypt.hash("password123", 10);
+
+  // 1. Super Administrador Global del Sistema
+  const superadmin = await prisma.user.upsert({
+    where: { email: "superadmin@residia.io" },
+    update: { passwordHash, role: "super_admin" },
+    create: {
+      email: "superadmin@residia.io",
+      passwordHash,
+      name: "Mauricio SuperAdmin",
+      role: "super_admin",
+    },
+  });
+
+  // 2. Residencial Demo Principal
   const residencial = await prisma.residencial.upsert({
     where: { id: "seed-residencial-1" },
-    update: {},
+    update: {
+      status: "activa",
+      maxDoors: 4,
+      planType: "enterprise",
+      monthlyFee: 3500.0,
+      billingCycleDay: 5,
+      billingStatus: "al_dia",
+      hardwareGatewayId: "GW-DEMO-01",
+      hardwareApiKey: "res_hw_99f2e34a76b1001",
+      hardwareBrokerUrl: "mqtts://iot.residia.io:8883",
+      hardwareStatus: "online",
+      lastHardwarePing: new Date(),
+    },
     create: {
       id: "seed-residencial-1",
       nombre: "Residencial Demo",
       direccion: "Av. Ejemplo 123",
+      status: "activa",
+      maxDoors: 4,
+      planType: "enterprise",
+      monthlyFee: 3500.0,
+      billingCycleDay: 5,
+      billingStatus: "al_dia",
+      hardwareGatewayId: "GW-DEMO-01",
+      hardwareApiKey: "res_hw_99f2e34a76b1001",
+      hardwareBrokerUrl: "mqtts://iot.residia.io:8883",
+      hardwareStatus: "online",
+      lastHardwarePing: new Date(),
+    },
+  });
+
+  // 3. Residencial Secundario (para pruebas de estado y múltiples condominios)
+  const residencial2 = await prisma.residencial.upsert({
+    where: { id: "seed-residencial-2" },
+    update: {},
+    create: {
+      id: "seed-residencial-2",
+      nombre: "Cumbres del Valle",
+      direccion: "Paseo de la Montaña 880",
+      status: "inactiva",
+      statusReason: "Pendiente de liquidación de instalación de hardware",
+      maxDoors: 2,
+      planType: "basic",
+      monthlyFee: 1800.0,
+      billingCycleDay: 15,
+      billingStatus: "vencido",
+      hardwareGatewayId: "GW-CUMBRES-02",
+      hardwareApiKey: "res_hw_cumbres8821a",
+      hardwareBrokerUrl: "mqtts://iot.residia.io:8883",
+      hardwareStatus: "offline",
     },
   });
 
   const door1 = await prisma.door.upsert({
     where: { id: "seed-door-1" },
-    update: {},
+    update: {
+      relayChannel: "Relay 1",
+      openPulseMs: 1500,
+      controllerId: "192.168.1.101",
+    },
     create: {
       id: "seed-door-1",
-      name: "Puerta principal",
+      name: "Puerta principal vehicular",
       doorType: "principal",
+      relayChannel: "Relay 1",
+      openPulseMs: 1500,
+      controllerId: "192.168.1.101",
       residencialId: residencial.id,
     },
   });
 
   const door2 = await prisma.door.upsert({
     where: { id: "seed-door-2" },
-    update: {},
+    update: {
+      relayChannel: "Relay 2",
+      openPulseMs: 1200,
+      controllerId: "192.168.1.102",
+    },
     create: {
       id: "seed-door-2",
-      name: "Peatonal",
+      name: "Peatonal caseta",
       doorType: "peatonal",
+      relayChannel: "Relay 2",
+      openPulseMs: 1200,
+      controllerId: "192.168.1.102",
       residencialId: residencial.id,
+    },
+  });
+
+  const admin2 = await prisma.user.upsert({
+    where: { email: "admin.cumbres@demo.com" },
+    update: {},
+    create: {
+      email: "admin.cumbres@demo.com",
+      passwordHash,
+      name: "Carlos Mendoza (Admin Cumbres)",
+      role: "admin_residencial",
+      residencialId: residencial2.id,
     },
   });
 
@@ -45,8 +131,6 @@ async function main() {
       residencialId: residencial.id,
     },
   });
-
-  const passwordHash = await bcrypt.hash("password123", 10);
 
   const admin = await prisma.user.upsert({
     where: { email: "admin@demo.com" },

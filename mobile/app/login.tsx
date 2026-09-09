@@ -184,6 +184,43 @@ export default function Login() {
             </View>
           )}
         </TouchableOpacity>
+
+        {/* Demo Fast Access Chips */}
+        <View style={styles.demoChipsContainer}>
+          <Text style={styles.demoChipsLabel}>Acceso rápido de prueba:</Text>
+          <View style={styles.demoChipsRow}>
+            <TouchableOpacity
+              style={[styles.demoChip, { borderColor: "rgba(245, 158, 11, 0.4)" }]}
+              onPress={() => {
+                setEmail("superadmin@residia.io");
+                setPassword("password123");
+              }}
+            >
+              <Ionicons name="shield-half" size={12} color="#F59E0B" style={{ marginRight: 4 }} />
+              <Text style={[styles.demoChipText, { color: "#F59E0B" }]}>SuperAdmin</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.demoChip}
+              onPress={() => {
+                setEmail("admin@demo.com");
+                setPassword("password123");
+              }}
+            >
+              <Text style={styles.demoChipText}>Admin</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.demoChip}
+              onPress={() => {
+                setEmail("residente@demo.com");
+                setPassword("password123");
+              }}
+            >
+              <Text style={styles.demoChipText}>Residente</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
     </KeyboardAvoidingView>
   );
@@ -305,6 +342,35 @@ const styles = StyleSheet.create({
   googleButtonText: {
     color: "#0F172A",
     fontSize: 15,
+    fontWeight: "600",
+  },
+  demoChipsContainer: {
+    marginTop: Theme.spacing.lg,
+    alignItems: "center",
+    width: "100%",
+  },
+  demoChipsLabel: {
+    fontSize: 11,
+    color: Theme.colors.textMuted,
+    marginBottom: 6,
+  },
+  demoChipsRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  demoChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Theme.colors.surfaceContainerLow,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: Theme.borderRadius.full,
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+  },
+  demoChipText: {
+    color: Theme.colors.textSecondary,
+    fontSize: 11,
     fontWeight: "600",
   },
 });

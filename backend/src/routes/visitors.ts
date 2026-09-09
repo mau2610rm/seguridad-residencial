@@ -56,12 +56,18 @@ router.post("/codes", async (req: AuthRequest, res: Response) => {
     const unit = await prisma.unit.findFirst({
       where: {
         id: body.unitId,
-        residencialId: req.user.residencialId,
+        ...(req.user.residencialId ? { residencialId: req.user.residencialId } : {}),
         ...(req.user.role === "residente" ? { userId: req.user.userId } : {}),
       },
+      include: { residencial: true },
     });
     if (!unit) {
       return res.status(404).json({ error: "Unidad no encontrada o sin acceso" });
+    }
+    if (unit.residencial.status !== "activa") {
+      return res.status(403).json({
+        error: `Operación bloqueada: El residencial se encuentra ${unit.residencial.status.toUpperCase()}. ${unit.residencial.statusReason ? `Motivo: ${unit.residencial.statusReason}` : "Contacte a administración."}`,
+      });
     }
     const validFrom = body.validFrom ? new Date(body.validFrom) : new Date();
     const validUntil = new Date(body.validUntil);

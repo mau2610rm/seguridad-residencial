@@ -11,6 +11,28 @@ model Residencial {
   id        String   @id @default(cuid())
   nombre    String
   direccion String?
+
+  // Estado operativo y control de activación
+  status       String   @default("activa") // activa | inactiva | suspendida
+  statusReason String?
+
+  // Dimensionamiento de infraestructura
+  maxDoors     Int      @default(4)
+
+  // Administración de cargos y plan
+  planType        String   @default("pro") // basic | pro | enterprise
+  monthlyFee      Float    @default(1500.0)
+  billingCycleDay Int      @default(1)
+  billingStatus   String   @default("al_dia") // al_dia | vencido | gracia
+  billingNotes    String?
+
+  // Configuración de Hardware IoT
+  hardwareGatewayId String?  // ID del dispositivo/concentrador en caseta
+  hardwareApiKey    String?  // Clave criptográfica para autenticar el hardware
+  hardwareBrokerUrl String?  // URL del broker MQTT o WebSocket
+  hardwareStatus    String   @default("unconfigured") // online | offline | unconfigured
+  lastHardwarePing  DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -22,19 +44,19 @@ model Residencial {
 }
 
 model User {
-  id             String      @id @default(cuid())
-  email          String      @unique
+  id             String       @id @default(cuid())
+  email          String       @unique
   passwordHash   String?
   name           String?
-  role           String      // admin_residencial | guardia | residente
-  residencialId  String
-  residencial    Residencial @relation(fields: [residencialId], references: [id], onDelete: Cascade)
-  unitId         String?     @unique
-  unit           Unit?       @relation("UserUnit")
-  googleId       String?     @unique
+  role           String       // super_admin | admin_residencial | guardia | residente
+  residencialId  String?
+  residencial    Residencial? @relation(fields: [residencialId], references: [id], onDelete: Cascade)
+  unitId         String?      @unique
+  unit           Unit?        @relation("UserUnit")
+  googleId       String?      @unique
   avatarUrl      String?
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   openings     Opening[]
   visitorCodes VisitorCode[]
@@ -61,9 +83,16 @@ model Unit {
 model Door {
   id            String   @id @default(cuid())
   name          String
-  doorType      String   @default("principal") // principal | peatonal | estacionamiento
+  doorType      String   @default("principal") // principal | peatonal | vehicular | servicio
   residencialId String
   residencial   Residencial @relation(fields: [residencialId], references: [id], onDelete: Cascade)
+
+  // Hardware y actuadores por puerta
+  relayChannel  String?  @default("Relay 1") // Canal/puerto de activación (ej. Relay 1, GPIO 23)
+  controllerId  String?  // IP o ID del controlador
+  openPulseMs   Int      @default(1500)      // Duración del pulso en ms
+  cameraRtspUrl String?  // Stream RTSP de cámara asociada
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

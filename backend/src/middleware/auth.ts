@@ -5,13 +5,13 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-export type Role = "admin_residencial" | "guardia" | "residente";
+export type Role = "super_admin" | "admin_residencial" | "guardia" | "residente";
 
 export interface JwtPayload {
   userId: string;
   email: string;
   role: Role;
-  residencialId: string;
+  residencialId?: string;
   unitId?: string;
 }
 
@@ -25,10 +25,18 @@ export async function authMiddleware(
   next: NextFunction
 ) {
   const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Token no proporcionado" });
+  let token: string | undefined;
+  if (authHeader?.startsWith("Bearer ")) {
+    token = authHeader.slice(7);
+  } else if (typeof req.query?.token === "string") {
+    token = req.query.token;
   }
-  const token = authHeader.slice(7);
+
+  if (!token) {
+    return res.status(401).json({
+      error: "Token no proporcionado. Incluye Header Authorization: Bearer <token> o parámetro ?token=<token> en la URL",
+    });
+  }
   try {
     const decoded = jwt.verify(token, config.jwt.secret) as JwtPayload;
     const user = await prisma.user.findUnique({
@@ -42,7 +50,7 @@ export async function authMiddleware(
       userId: user.id,
       email: user.email,
       role: user.role as Role,
-      residencialId: user.residencialId,
+      residencialId: user.residencialId ?? undefined,
       unitId: user.unitId ?? undefined,
     };
     next();

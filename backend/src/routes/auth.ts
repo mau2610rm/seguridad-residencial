@@ -25,7 +25,7 @@ const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
   name: z.string().optional(),
-  role: z.enum(["admin_residencial", "guardia", "residente"]),
+  role: z.enum(["super_admin", "admin_residencial", "guardia", "residente"]),
   residencialId: z.string().optional(),
   unitId: z.string().optional(),
 });
@@ -55,7 +55,7 @@ router.post("/login", authLimiter, async (req: Request, res: Response) => {
       userId: user.id,
       email: user.email,
       role: user.role as JwtPayload["role"],
-      residencialId: user.residencialId,
+      residencialId: user.residencialId ?? undefined,
       unitId: user.unitId ?? undefined,
     };
     const { accessToken, refreshToken } = signTokens(payload);
@@ -153,7 +153,7 @@ router.post("/google", authLimiter, async (req: Request, res: Response) => {
       userId: user.id,
       email: user.email,
       role: user.role as JwtPayload["role"],
-      residencialId: user.residencialId,
+      residencialId: user.residencialId ?? undefined,
       unitId: user.unitId ?? undefined,
     };
     const { accessToken, refreshToken } = signTokens(payload);
@@ -203,7 +203,7 @@ router.post("/refresh", authLimiter, async (req: Request, res: Response) => {
       userId: user.id,
       email: user.email,
       role: user.role as JwtPayload["role"],
-      residencialId: user.residencialId,
+      residencialId: user.residencialId ?? undefined,
       unitId: user.unitId ?? undefined,
     };
     const { accessToken } = signTokens(payload);

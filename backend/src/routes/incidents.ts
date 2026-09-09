@@ -83,7 +83,9 @@ router.get("/", async (req: AuthRequest, res: Response) => {
 });
 
 router.post("/", upload.array("photos", 5), async (req: AuthRequest, res: Response) => {
-  if (!req.user) return res.status(401).json({ error: "No autenticado" });
+  if (!req.user || !req.user.residencialId) {
+    return res.status(401).json({ error: "No autenticado o sin residencial asignado" });
+  }
   try {
     const body = createSchema.parse(req.body);
     const files = (req as unknown as { files?: Express.Multer.File[] }).files;
